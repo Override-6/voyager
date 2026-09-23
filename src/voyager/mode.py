@@ -28,6 +28,7 @@ class AgentMode:
     prompt_name = "MAIN"  # the system prompt file (for the "re-applied" notice)
     compact_instructions = ""  # what the summarizer is asked for (a mode sets it)
     summary_note = ""  # appended to the summary message that replaces the discussion
+    resume_note = ""  # added to the message that sends a resumed session back to work
 
     def __init__(self, agent: "Agent") -> None:
         self.agent = agent
@@ -44,6 +45,10 @@ class AgentMode:
 
     def load_extra_state(self, extra: dict[str, Any]) -> None:
         pass
+
+    def wants_continue(self) -> bool:
+        """A resumed session whose last turn ended normally still has work to do (e.g. an unfinished plan)."""
+        return False
 
     def on_submit(self, src: str) -> None:
         """A message is queued for the agent (src: "user" or "agent")."""

@@ -151,6 +151,9 @@ class RemoteSession:
     def busy(self) -> bool:
         return any(a.running for a in self.agents.values()) or bool(self.tasks.running())
 
+    def resume_work(self, note: str = "") -> bool:
+        return False  # the daemon that hosts the session already sent it back to work when it resumed it
+
     def is_empty(self) -> bool:
         return not any(a.log.items for a in self.agents.values())
 

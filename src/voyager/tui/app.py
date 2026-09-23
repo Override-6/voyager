@@ -113,6 +113,8 @@ async def run_tui(session: Any, first_prompt: str | None = None, pick: bool = Fa
         ctl.open_picker()
     if first_prompt:
         session.main.submit(first_prompt)
+    else:
+        session.resume_work()  # --local --resume / -c: carry on where it stopped
     left = "stopped"
     try:
         await app.run_async()

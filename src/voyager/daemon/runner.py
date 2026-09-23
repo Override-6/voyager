@@ -32,6 +32,8 @@ async def serve(a) -> int:  # noqa: ANN001  (argparse.Namespace)
     print(f"session {session.id} serving on {server.path}", flush=True)
     if a.prompt:
         session.main.submit(a.prompt)
+    else:
+        session.resume_work()  # a resumed session carries on by itself (no-op for a new one)
     await server.stopped.wait()
     session.stop_all()
     await server.close()  # clients get "bye" while the agents unwind

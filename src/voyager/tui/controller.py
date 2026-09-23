@@ -278,6 +278,8 @@ class Controller:
         self.say(message, 6)
         if first_message:  # e.g. /voyager <name> <objective>: the mission starts right away
             new.main.submit(first_message)
+        else:
+            new.resume_work()  # a resumed session carries on by itself (a daemon session already did, in its daemon)
 
     # --------------------------------------------------------------- commands
     def command(self, text: str) -> None:

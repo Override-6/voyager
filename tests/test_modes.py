@@ -12,6 +12,49 @@ def text(line):
     return "".join(t for _, t in line)
 
 
+def saved_session(cfg, sid, last, outcome, where=None):
+    """A saved session whose history ends with `last` ("user": unanswered, "assistant": answered) and a given outcome."""
+    s = Session(where or cfg, session_id=sid)
+    s.main.log.add("user", "do it", src="user")
+    s.main.messages.append({"role": "user", "content": "do it"})
+    if last == "assistant":
+        s.main.messages.append({"role": "assistant", "content": [{"type": "text", "text": "done"}]})
+    s.main.outcome = outcome
+    s.save()
+    return s
+
+
+def test_a_resumed_session_goes_back_to_work_only_if_it_was_interrupted(cfg, offline):
+    async def go():
+        for sid, last, outcome, expect in [("s1", "assistant", "done", False),   # answered: nothing to do
+                                           ("s2", "assistant", "stopped", True),  # stopped by the user
+                                           ("s3", "user", "done", True),          # cut off before the model answered
+                                           ("s4", "assistant", "error", True)]:   # failed
+            saved_session(cfg, sid, last, outcome)
+            back = Session.load(cfg, sid)
+            assert back.resume_work() is expect, sid
+            assert back.resume_work() is False  # once per resume
+            await back.wait_idle()
+            if expect:
+                assert "resumed" in offline[-1][1] and "<resumed>" in offline[-1][1]
+                assert any("session resumed" in i.text for i in back.main.log.items)
+        assert Session(cfg).resume_work() is False  # a new session is not a resume
+        # a mission with an unfinished plan continues even after a clean turn; a blocked one waits for the user
+        ws = Workspace.create(cfg.workspaces_dir, "quest", "beat the boss")
+        wcfg = dataclasses.replace(cfg, cwd=ws.root)
+        saved_session(cfg, "m1", "assistant", "done", where=wcfg)
+        assert Session.load(cfg, "m1").resume_work() is True  # phase 0: no approach recorded yet
+        (ws.root / "PLAN.md").write_text("# Plan\n## Phases\n- [>] 1. Recon — exit: x\n## Now\n- [ ] a\n## Blocked\n- need a key\n## Log\n")
+        assert Session.load(cfg, "m1").resume_work() is False
+        saved_session(cfg, "m2", "assistant", "stopped", where=wcfg)
+        (ws.root / "PLAN.md").write_text("# Plan\n## Phases\n- [>] 1. Recon — exit: x\n## Now\n- [ ] a\n## Blocked\n## Log\n")
+        back = Session.load(cfg, "m2")
+        assert back.resume_work() is True
+        await back.wait_idle()
+    asyncio.run(go())
+    assert "trust PLAN.md" in offline[-1][1]  # the mission's resume note
+
+
 def test_a_session_resumes_in_its_own_mode_wherever_it_is_resumed_from(cfg, tmp_path):
     ws = Workspace.create(cfg.workspaces_dir, "quest", "beat the boss")
     mission = Session(dataclasses.replace(cfg, cwd=ws.root), session_id="mission-1")

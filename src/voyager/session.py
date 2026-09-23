@@ -28,6 +28,10 @@ from .transcript import TranscriptWriter
 
 AGENT_CLASSES: dict[str, type[Agent]] = {"local": LocalAgent, "coder": CoderAgent, "bonsai": LocalAgent}  # "bonsai": legacy name of "local" in saved sessions
 Hook = Callable[[Agent, str, Item, Any], None]
+RESUME_TEXT = (
+    "This session was stopped and has just been resumed; the conversation above is exactly as it was. Continue from where "
+    "you left off without repeating what is already done."
+)
 
 
 class Session:
@@ -44,6 +48,7 @@ class Session:
         self.hooks: list[Hook] = [self.events, self.transcript]  # front ends subscribe to every agent's log events here
         self._client = client
         self._counter = 0
+        self._resumed = False  # set by load(): see resume_work()
         self.tasks = TaskManager(self)
         self.mcp = McpManager(self)
         self.main: Agent = LocalAgent(self, "main", "main")
@@ -231,4 +236,25 @@ class Session:
                 agent = AGENT_CLASSES[d["kind"]](s, d["id"], d["name"], parent_id=d["parent_id"], prompt=d.get("prompt", ""))
                 s.agents[agent.id] = agent
             agent.restore(d)
+        s._resumed = True  # its front end calls resume_work() once the event loop runs
         return s
+
+    def resume_work(self, note: str = "") -> bool:
+        """A resumed session picks its work up by itself instead of waiting for a message.
+
+        Sends the main agent back to work when its last turn did not end cleanly (stopped, failed, or cut off with a
+        message or tool results it never answered) or when its mode says there is still work (an unfinished plan).
+        A conversation whose last answer was delivered stays quiet. Once per resume; needs a running event loop."""
+        if not self._resumed:
+            return False
+        self._resumed = False
+        m = self.main
+        if not m.messages or not (m.messages[-1]["role"] == "user" or m.outcome in ("stopped", "error") or m.mode.wants_continue()):
+            return False
+        cut = [f"{a.id} ({a.name})" for a in self.agents.values() if a is not m and a.outcome in ("stopped", "error")]
+        parts = [RESUME_TEXT, m.mode.resume_note, note]
+        if cut:
+            parts.append(f"Sub-agents that were interrupted by the stop: {', '.join(cut)}. Resume the ones whose work you still need with send_message.")
+        m.submit("<resumed>\n" + " ".join(p for p in parts if p) + "\n</resumed>", src="agent",
+                 shown="↻ session resumed: continuing where it stopped")
+        return True

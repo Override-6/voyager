@@ -129,7 +129,8 @@ def test_resuming_a_saved_session_starts_a_daemon_for_it_then_reuses_that_one(cf
     from voyager.daemon.backend import DaemonBackend, open_first, resolve_saved
     saved = Session(cfg, session_id="20260101-101010")
     saved.main.log.add("user", "remember me", src="user")
-    saved.main.messages.append({"role": "user", "content": "remember me"})
+    saved.main.messages += [{"role": "user", "content": "remember me"}, {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}]
+    saved.main.outcome = "done"  # a finished conversation: resuming it must not send the (real) model anywhere
     saved.save()
     assert resolve_saved(cfg, "2026010") == "20260101-101010" and resolve_saved(cfg, None) == "20260101-101010"
     with pytest.raises(FileNotFoundError):

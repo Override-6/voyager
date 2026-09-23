@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..mode import AgentMode
+from .approach import gate_text
 from .compaction import CHECKPOINT, CHECKPOINT_GAP, HARD_GAP, WORKSPACE_COMPACT_INSTRUCTIONS, WORKSPACE_NOTE
 from .evidence import record
 from .nudge import maybe_nudge
@@ -20,6 +21,7 @@ class VoyagerAgentMode(AgentMode):
     name = "voyager"
     compact_instructions = WORKSPACE_COMPACT_INSTRUCTIONS
     summary_note = WORKSPACE_NOTE
+    resume_note = "Your workspace state in the system prompt is current: trust PLAN.md over your memory of it, and take the first Now item."
 
     def __init__(self, agent: "Agent", ws: "Workspace") -> None:
         super().__init__(agent)
@@ -55,6 +57,11 @@ class VoyagerAgentMode(AgentMode):
     def load_extra_state(self, extra: dict[str, Any]) -> None:
         self.round = extra.get("round", 0)
         self.checkpointed = extra.get("checkpointed", False)
+
+    def wants_continue(self) -> bool:
+        """The plan is unfinished (or phase 0 has not chosen its approach yet) and nothing is waiting on the user."""
+        a, ws = self.agent, self.ws
+        return a.is_main and not ws.section("## Blocked") and (ws.unfinished() or (not ws.phases() and bool(gate_text(ws))))
 
     def on_submit(self, src: str) -> None:
         if src == "user":  # the user is steering again: the nudge budget starts over
