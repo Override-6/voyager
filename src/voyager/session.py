@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import json
 import re
@@ -216,6 +217,11 @@ class Session:
         if not path.is_file():
             raise FileNotFoundError(f"no such session: {ref or path}")
         data = json.loads(path.read_text())
+        # The mode is derived from the cwd (a workspace = voyager mode), so a session resumes where it was started,
+        # wherever it is resumed from; a copy of the config, so the caller's own stays untouched.
+        saved = Path(data.get("cwd") or cfg.cwd)
+        if saved != cfg.cwd and saved.is_dir():
+            cfg = dataclasses.replace(cfg, cwd=saved)
         s = cls(cfg, session_id=data["id"], client=client)
         s._counter = data.get("counter", 0)
         for d in data["agents"]:
