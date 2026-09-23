@@ -87,6 +87,11 @@ class LocalAgent(CompactionMixin, Agent):
         args_chars: dict[int, int] = {}
         t0 = time.monotonic()
         ok = False
+        # The model reads its whole context before the first token: after a resume, or once the server's cache was
+        # lost, that can take minutes with nothing streaming. Say so, instead of looking hung.
+        ctx_tokens = self.context_estimate()
+        self.activity = f"waiting for the model (~{ctx_tokens // 1000}k tokens of context)…"
+        self.session.events.emit(self, "waiting", tokens=ctx_tokens)
         try:
             async with self.session.client.messages.stream(**kwargs) as stream:
                 async for ev in stream:

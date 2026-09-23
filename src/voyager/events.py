@@ -7,7 +7,7 @@ created lazily, on the first event, so an empty session leaves nothing behind. B
 reaches an agent.
 
 Events (all carry `ts`, `agent`, and `round` in voyager mode):
-  start  user  gen_start  gen  text  thinking  tool_start  tool_end  tool_bg  usage  compact_start  compaction
+  start  user  waiting  gen_start  gen  text  thinking  tool_start  tool_end  tool_bg  usage  compact_start  compaction
   round  checkpoint  notice  error  turn_end  end
 """
 

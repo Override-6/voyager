@@ -104,7 +104,8 @@ def render(ev: dict[str, Any], *, show_start: bool = False, show_all: bool = Fal
         body = f"  ⏺ {tool} …"
     if body is None and show_all:
         body = {"usage": f"↳ ctx {_k(ev.get('ctx'))}/{_k(ev.get('window'))}", "thinking": f"✻ thinking ({ev.get('chars')} chars)",
-                "tool_start": f"  ⏺ {tool} …", "gen_start": f"  … model starts a {ev.get('name') or ev.get('kind')}",
+                "tool_start": f"  ⏺ {tool} …", "waiting": f"  … waiting for the model (~{(ev.get('tokens') or 0) // 1000}k tokens of context)",
+                "gen_start": f"  … model starts a {ev.get('name') or ev.get('kind')}",
                 "gen": f"  … model still writing a {ev.get('kind')} ({ev.get('chars')} chars)"}.get(e or "")
     return head + body if body else None
 
@@ -121,6 +122,8 @@ def state_line(run: dict[str, Any], events: list[dict[str, Any]], now: float) ->
     pending = [e for e in events if e.get("ev") == "tool_start" and not any(
         x.get("ev") == "tool_end" and x.get("id") == e.get("id") and x.get("agent") == e.get("agent") for x in events)]
     doing = f" · in flight: {pending[-1].get('name')}({pending[-1].get('summary', '')})" if pending else ""
+    if last.get("ev") == "waiting":  # the request is out and the model is still reading its context
+        doing = f" · waiting for the model to start answering (~{last.get('tokens', 0) // 1000}k tokens of context to read)"
     if last.get("ev") in ("gen_start", "gen"):  # the model is mid-block: not a hang, just a long generation
         what = last.get("name") or last.get("kind")
         doing = f" · model is generating {what}" + (f" ({last['chars']} chars so far)" if "chars" in last else "")
