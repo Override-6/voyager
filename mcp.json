@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "ghostchrome": {
+      "command": "/home/maxime/.ghostchrome/bin/ghostchrome-mcp",
+      "args": [],
+      "env": {
+        "GHOSTCHROME_HEADLESS": "false",
+        "DISPLAY": ":1",
+        "GHOSTCHROME_PROFILE": "main"
+      },
+      "timeout": 120,
+      "startupTimeout": 60
+    }
+  }
+}

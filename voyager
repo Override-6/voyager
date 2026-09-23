@@ -1,0 +1,54 @@
+#!/bin/bash
+# voyager: start the TUI (or any voyager command) against the local model server.
+#   ./voyager                          interactive TUI, working in the directory you run it from
+#   ./voyager "first message"          same, sending a first message
+#   ./voyager --voyager NAME "goal"    voyager mode: a long-running mission in workspace NAME
+#   ./voyager --resume                 browse saved conversations and pick one (also: /resume inside the TUI)
+#   ./voyager -c                       continue the latest conversation for this directory
+#   ./voyager -p "task"                non-interactive: stream to stdout, wait for all agents, exit
+#   ./voyager --detach "task"          start it in the background; then --ps, --attach [--cli], --send, --stop, --monitor
+# Any other voyager flag is passed through (see: ./voyager --help).
+#
+# Env: VOYAGER_URL (model server, default http://127.0.0.1:8080), VOYAGER_NO_SERVER_START=1 (never auto-start the server),
+#      VOYAGER_SERVER_SCRIPT (script that starts the local server, default ../run-bonsai-abliterated-baked.sh),
+#      VOYAGER_HOME (sessions, workspaces, input history; default ~/.voyager),
+#      VOYAGER_CLAUDE_BIN (the `claude` CLI for Coder agents).
+# Tip: put it on your PATH:  ln -s "$PWD/voyager" ~/.local/bin/voyager
+set -e
+APP="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+URL="${VOYAGER_URL:-${BONSAI_URL:-http://127.0.0.1:8080}}"
+NO_START="${VOYAGER_NO_SERVER_START:-$BONSAI_NO_SERVER_START}"
+SERVER_SCRIPT="${VOYAGER_SERVER_SCRIPT:-$APP/../run-bonsai-abliterated-baked.sh}"
+
+healthy() { curl -s -m 2 "$URL/health" | grep -q '"ok"'; }
+
+# Commands that only read session files or talk to a running session need no model server.
+needs_server=1
+for arg in "$@"; do
+  case "$arg" in --monitor|--ps|--stop|--send|--attach|--help|-h) needs_server=0 ;; esac
+done
+
+# Start the local llama-server if it is not answering.
+if [ "$needs_server" = 1 ] && ! healthy && [ -z "$NO_START" ]; then
+  case "$URL" in
+    http://127.0.0.1:*|http://localhost:*)
+      if [ -x "$SERVER_SCRIPT" ]; then
+        LOG="$(dirname "$SERVER_SCRIPT")/abliterate/srv_live.log"
+        [ -d "$(dirname "$LOG")" ] || LOG=/tmp/voyager-server.log
+        echo "[voyager] model server not answering on $URL, starting it..." >&2
+        (cd "$(dirname "$SERVER_SCRIPT")" && setsid nohup "$SERVER_SCRIPT" > "$LOG" 2>&1 < /dev/null &)
+        for _ in $(seq 1 90); do healthy && break; sleep 3; done
+        healthy || { echo "[voyager] server failed to start, see $LOG" >&2; exit 1; }
+      else
+        echo "[voyager] warning: $URL is not answering and no server script at $SERVER_SCRIPT (set VOYAGER_SERVER_SCRIPT)" >&2
+      fi
+      ;;
+    *) echo "[voyager] warning: $URL is not answering (not a local URL, so not starting anything)" >&2 ;;
+  esac
+fi
+
+command -v "${VOYAGER_CLAUDE_BIN:-${BONSAI_CLAUDE_BIN:-claude}}" >/dev/null 2>&1 \
+  || echo "[voyager] note: 'claude' CLI not found: Coder agents will be unavailable" >&2
+
+# `uv run` creates/updates .venv on first use. voyager works in the caller's current directory.
+exec uv run --quiet --project "$APP" voyager "$@"
