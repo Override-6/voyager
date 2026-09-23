@@ -1,7 +1,7 @@
 [project]
 name = "voyager"
 version = "0.1.0"
-description = "Agentic CLI for a local model: chat and coding, or long-running missions in workspaces, with live streaming of thinking, text and tool calls"
+description = "The Voyager pattern for local LLMs: long-running missions that survive any number of context compactions, with memory, plans and tools kept in a workspace"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=1.0",

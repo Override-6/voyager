@@ -1,8 +1,9 @@
 # voyager
 
-Agentic CLI (Claude Code-style TUI) for a local model served by llama-server through the Anthropic `/v1/messages` API.
-Beyond coding, it runs long objectives in **workspaces**: the agent keeps its own codebase (`tools/`) and knowledge base
-(`knowledge/`), plans on three horizons in `PLAN.md`, and survives any number of context compactions. `README.md` is the
+The Voyager pattern for a local model served by llama-server through the Anthropic `/v1/messages` API. The point of the project is
+**voyager mode**: long objectives run in **workspaces**, where the agent keeps its own codebase (`tools/`) and knowledge base
+(`knowledge/`), plans on three horizons in `PLAN.md`, and survives any number of context compactions. Chat mode (no workspace, a plain
+coding / chat assistant) is a secondary convenience: keep it working, but design decisions favour voyager mode. `README.md` is the
 user-facing reference (features, commands, flags); this file is for working on the code.
 
 ## Commands

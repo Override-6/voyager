@@ -1,14 +1,33 @@
 # voyager
 
-An agentic CLI for a **local model**, in the style of Claude Code. Use it as a coding / chat assistant, or hand it a big objective and let it work
-for hours: in **voyager mode** it keeps its own codebase and knowledge base in a workspace, plans on three horizons (long / middle / short term) and
-carries on across any number of context compactions, in the spirit of the Voyager agent pattern. Sessions run in the background, so you can start a
-task, quit, and attach again later from the TUI or from plain text.
+**Give a local model an objective that takes hours or days, and let it work on it across as many context windows as it takes.**
 
-* **Chat mode** (default): a streaming TUI with tools (shell, files, web search and fetch, MCP), background sub-agents and tasks, auto-compaction and resumable conversations.
-* **Voyager mode** (`voyager --voyager NAME "objective"`): a long-running mission in workspace `NAME` with a persona, a method, a plan that is the single source of
-  truth, a decision step (research and choose an approach before acting), checkpoints before each compaction, and keep-going nudges.
-* **Background sessions**: `--detach`, `--ps`, `--attach [--cli]`, `--send`, `--stop`, plus `--monitor` to watch a session from outside.
+voyager implements the *Voyager pattern* for a local language model with a small context window. A model that forgets everything every few
+tens of thousands of tokens can still carry out a long project if its memory does not live in its context. So the agent keeps its **memory in a
+workspace**: a plan on three horizons (long-term phases, the current phase, the next few actions), a knowledge base of what it has learned, and a
+library of tested, reusable tools it wrote itself (the skill-library idea of the original Voyager agent, Wang et al. 2023). The conversation is
+disposable: when the context fills up, the agent first saves its state to the workspace, the conversation is compacted, and the next *round* starts
+from the workspace, not from a summary. Round after round, until the objective is reached.
+
+```
+objective ─▶ phase 0: write the definition of done · research prior art · choose an approach (≥ 3 options, decide, record why)
+                │
+     ┌──────────▼───────────────┐
+     │ round N   (one context)  │   orient ─▶ act (by hand · a script · a saved tool) ─▶ record what was learned ─▶ tick the plan
+     └──────────┬───────────────┘
+      context ~60% full ─▶ <checkpoint>: save plan, notes, tools ─▶ compact ─▶ git commit ─▶ round N+1 restarts from the workspace
+                │
+                └── ... until every criterion of the definition of done is verified (or the agent is blocked on you)
+```
+
+**What is enforced by the harness, not left to the model's good will**
+* The **method and persona** open the conversation and are re-pinned after every compaction, so they are never summarized away.
+* An **approach gate**: before touching the environment the agent must have researched (searches and page reads are counted, cited URLs must be ones it really
+  found) and written down at least three different approaches and its decision.
+* **Tools are tested when saved** (`save_tool` runs the tool's example), indexed, linted for size and headers, and the workspace is **committed** every turn and every round.
+* **Bounded keep-going nudges** send the agent back to work if it stops with an unfinished plan; it may only stop when done, blocked, or waiting.
+* **Nothing is lost**: a live event feed, the complete transcript and a per-round archive are written for every session (`--monitor` watches one from outside).
+* **Sessions run in background daemons**: start a mission, close the terminal, and attach again days later from the TUI or from plain text.
 
 ## Requirements and quick start
 
@@ -18,15 +37,53 @@ task, quit, and attach again later from the TUI or from plain text.
 
 ```
 git clone git@github.com:Override-6/voyager.git && cd voyager
-./voyager                                        # chat / coding TUI in the current directory
-./voyager --voyager quest "map the target's login flow"     # a mission in workspace "quest"
-./voyager --detach --voyager quest "..."         # the same, in the background; then: ./voyager --attach
+./voyager --detach --voyager quest "map the target's login flow"    # a mission in workspace "quest", running in the background
+./voyager --ps                                   # running sessions          ./voyager --monitor -f   # follow what it does
+./voyager --attach                               # the full TUI on it (--cli: text only)      ./voyager --stop ID   # end it (saved)
+./voyager --voyager quest "map the target's login flow"     # the same, with the TUI in front
 ./voyager --help                                 # every flag
 ```
 `./voyager` is a shell script: it starts the local llama-server if it is not answering (`VOYAGER_SERVER_SCRIPT`), then runs the app with `uv run`.
 Put it on your PATH with `ln -s "$PWD/voyager" ~/.local/bin/voyager`. Tests: `uv run pytest -q` (offline).
 
-## Features
+**Chat mode.** Without `--voyager`, a session is a plain coding / chat assistant in the same TUI, with the same tools (shell, files, web, MCP) and no workspace or
+plan. It is there for quick questions and is not what the project is about; `/voyager NAME [objective]` switches to a mission, `/chat` back.
+
+## Voyager mode in detail
+
+A workspace is a folder per objective, `~/.voyager/workspaces/<name>/` (`--workspaces-dir` / `VOYAGER_WORKSPACES`), that the agent owns and maintains alone:
+
+```
+OBJECTIVE.md   goal · definition of done · constraints · inputs
+PLAN.md        the three horizons: ## Phases (long term) · ## Current phase (middle) · ## Now (short) · ## Blocked · ## Log
+tools/         its codebase: tools/<area>/<name>.py with a header (summary/usage/example/status), shared code in tools/lib/
+knowledge/     its notes: knowledge/<area>/<topic>.md with frontmatter (summary/confidence/sources/updated)
+scratch/       throwaway scripts and raw outputs (gitignored, not indexed)
+```
+
+* **Entering it.** `voyager --voyager NAME "objective"`, or `/voyager NAME [objective]` in the TUI (creating the workspace if the name is free; an objective starts the
+  mission right away); `/voyager` alone lists workspaces, `/chat` (or `/voyager off`) leaves. The mode shows on the line under the chat bar. A conversation is in
+  voyager mode iff its cwd is inside a workspace, so `--resume` and `/resume` find it again by themselves.
+* **Context.** The main agent runs on `MISSION.md`, which ends with a *workspace state* block: OBJECTIVE.md, PLAN.md, a one-line index of every tool
+  and note, and lint problems (missing headers or frontmatter, a PLAN.md over budget, ...). Each section has a size budget; going over cuts it and becomes a
+  problem to fix, which is what keeps the workspace pruned. The block is a snapshot, refreshed on each new message and after each compaction, not on every
+  request, so the prompt prefix stays cacheable. Sub-agents get a smaller block (objective + indexes) and may not edit OBJECTIVE.md / PLAN.md.
+* **Method.** Phases with checkable exit criteria (phase 0 writes the objective, takes stock, then chooses the approach); in each step the agent works manually, writes a script in `scratch/` for
+  bulk or repeated work, or promotes it to `tools/` when it will be reused; facts go to `knowledge/` as soon as they are learned.
+* **Approach gate.** Before acting on the environment the agent must write `knowledge/approach.md` (Channels, Approaches with at least three different in kind,
+  Prior art with URLs, Decision). The harness checks it structurally (`approach.py`) and against what it saw the agent do (`evidence.py` counts `web_search` / `web_fetch` / `search_workspace` calls in `scratch/.evidence.json`; at least 3 searches and 2 page reads are required, and cited URLs must be ones the agent really came across): until it is complete the state block says "Approach decision: NOT RECORDED"
+  and the keep-going nudge fires even in phase 0. The prompts stay domain-neutral: they describe how a language model should choose, never what to choose.
+* **Tools.** `save_tool(path, content)` checks the header, runs its `example` from the workspace root, marks it `verified` (and commits) or `draft` (and
+  returns the error); `search_workspace(query, scope)` ranks tools and notes. Both exist only inside a workspace.
+* **Compaction = checkpoint.** At `checkpoint_at` (default `compact_at - 0.10`) a `<checkpoint>` block asks the agent to save its state to the workspace;
+  compaction waits for it (up to `compact_at + 0.15`), then summarizes only the work in flight. Each compaction ends a *round*: the round counter goes up,
+  the workspace is committed and the snapshot refreshed.
+* **Keep going.** The main agent should end its turn only when the objective is done, it is blocked (written under `## Blocked`), or it is waiting
+  for sub-agents / tasks. If it stops with unfinished phases and none of those applies, a `<continue>` message sends it back to work: at most
+  `--max-nudges` (default 20) per user message, and never twice in a row without a workspace change (git HEAD moved), so a stuck agent can't loop.
+* **Git.** The workspace is a git repository, committed automatically at the end of each turn, after each compaction, and when a tool is verified.
+
+## The TUI and the agents (both modes)
 
 | | |
 |---|---|
@@ -50,7 +107,7 @@ One folder per mode (`chat/`, `voyager/`); what both share (`LOCAL.md`, `CODER.m
 
 | file | used by |
 |---|---|
-| `voyager/MISSION.md` | the main agent **inside a workspace**: workspace conventions (files, PLAN.md format, tools, knowledge) (see Workspaces) |
+| `voyager/MISSION.md` | the main agent **inside a workspace**: workspace conventions (files, PLAN.md format, tools, knowledge) (see Voyager mode in detail) |
 | `voyager/PERSONA.md` | who the mission agent is (a principal engineer and researcher who knows it is a language model); opens the `MISSION.md` system prompt and the pinned method |
 | `voyager/METHOD.md` | the Voyager-style method (three horizons, work loop, phase 0, checkpoints, autonomy): sent as the **first user message** of the main agent in a workspace and re-pinned at the top after every compaction |
 | `chat/MAIN.md` | the main agent outside a workspace. References `AGENTS.md`, and contains the **privacy rule**: never tell the Coder what is really being done, send no personal data / proprietary code, abstract every task |
@@ -59,41 +116,6 @@ One folder per mode (`chat/`, `voyager/`); what both share (`LOCAL.md`, `CODER.m
 
 `{{cwd}} {{platform}} {{date}} {{agent_id}} {{agent_name}} {{agents_md}}` are substituted, plus `{{ws_name}} {{workspace_state}} {{persona}}` in voyager mode (empty outside it). Files are re-read on every request, so edits apply immediately.
 Override the folder with `--system-dir` / `VOYAGER_SYSTEM_DIR`.
-
-## Workspaces (long-running objectives)
-
-A workspace is a folder per objective, `~/.voyager/workspaces/<name>/` (`--workspaces-dir` / `VOYAGER_WORKSPACES`), that the agent owns and maintains alone:
-
-```
-OBJECTIVE.md   goal · definition of done · constraints · inputs
-PLAN.md        the three horizons: ## Phases (long term) · ## Current phase (middle) · ## Now (short) · ## Blocked · ## Log
-tools/         its codebase: tools/<area>/<name>.py with a header (summary/usage/example/status), shared code in tools/lib/
-knowledge/     its notes: knowledge/<area>/<topic>.md with frontmatter (summary/confidence/sources/updated)
-scratch/       throwaway scripts and raw outputs (gitignored, not indexed)
-```
-
-* **Two modes**, shown on the line under the chat bar. **Chat** (default): plain coding / chat, `chat/MAIN.md`. **Voyager**: a long-running mission in a workspace.
-  `/voyager <name> [objective]` enters it (creating the workspace if the name is free; an objective starts the mission right away), `/voyager` alone lists
-  workspaces, `/chat` (or `/voyager off`) goes back to chat mode. `/workspace [new <name> [objective] | <name> | none]` still works as the long form. A conversation is in voyager mode iff its cwd is inside a workspace;
-  `--workspace NAME` starts in one. Opening a workspace starts a new conversation with cwd = the workspace, so `/resume` lists that workspace's conversations.
-* **Context.** The main agent runs on `MISSION.md`, which ends with a *workspace state* block: OBJECTIVE.md, PLAN.md, a one-line index of every tool
-  and note, and lint problems (missing headers or frontmatter, a PLAN.md over budget, ...). Each section has a size budget; going over cuts it and becomes a
-  problem to fix, which is what keeps the workspace pruned. The block is a snapshot, refreshed on each new message and after each compaction, not on every
-  request, so the prompt prefix stays cacheable. Sub-agents get a smaller block (objective + indexes) and may not edit OBJECTIVE.md / PLAN.md.
-* **Method.** Phases with checkable exit criteria (phase 0 writes the objective, takes stock, then chooses the approach); in each step the agent works manually, writes a script in `scratch/` for
-  bulk or repeated work, or promotes it to `tools/` when it will be reused; facts go to `knowledge/` as soon as they are learned.
-* **Approach gate.** Before acting on the environment the agent must write `knowledge/approach.md` (Channels, Approaches with at least three different in kind,
-  Prior art with URLs, Decision). The harness checks it structurally (`approach.py`) and against what it saw the agent do (`evidence.py` counts `web_search` / `web_fetch` / `search_workspace` calls in `scratch/.evidence.json`; at least 3 searches and 2 page reads are required, and cited URLs must be ones the agent really came across): until it is complete the state block says "Approach decision: NOT RECORDED"
-  and the keep-going nudge fires even in phase 0. The prompts stay domain-neutral: they describe how a language model should choose, never what to choose.
-* **Tools.** `save_tool(path, content)` checks the header, runs its `example` from the workspace root, marks it `verified` (and commits) or `draft` (and
-  returns the error); `search_workspace(query, scope)` ranks tools and notes. Both exist only inside a workspace.
-* **Compaction = checkpoint.** At `checkpoint_at` (default `compact_at - 0.10`) a `<checkpoint>` block asks the agent to save its state to the workspace;
-  compaction waits for it (up to `compact_at + 0.15`), then summarizes only the work in flight. Each compaction ends a *round*: the round counter goes up,
-  the workspace is committed and the snapshot refreshed.
-* **Keep going.** The main agent should end its turn only when the objective is done, it is blocked (written under `## Blocked`), or it is waiting
-  for sub-agents / tasks. If it stops with unfinished phases and none of those applies, a `<continue>` message sends it back to work: at most
-  `--max-nudges` (default 20) per user message, and never twice in a row without a workspace change (git HEAD moved), so a stuck agent can't loop.
-* **Git.** The workspace is a git repository, committed automatically at the end of each turn, after each compaction, and when a tool is verified.
 
 ## The Coder agent
 

@@ -13,7 +13,7 @@ from .voyager.workspace import Workspace
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="voyager", description="Agentic CLI for a local model: chat and coding, or long-running missions.")
+    p = argparse.ArgumentParser(prog="voyager", description="The Voyager pattern for a local model: long-running missions (--voyager NAME), plus a plain chat mode.")
     p.add_argument("prompt", nargs="?", help="optional first message (interactive mode keeps running)")
     p.add_argument("-p", "--print", dest="print_mode", action="store_true",
                    help="non-interactive: run the prompt, stream to stdout, wait for all agents, exit")
