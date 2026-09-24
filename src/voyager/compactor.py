@@ -10,6 +10,11 @@ from .compaction import (
     COMPACT_SYSTEM, estimate_tokens, last_user_request, pinned_block, summary_message, transcript_text,
 )
 
+COMPACT_RETRY_TOKENS = 8000  # after a failed compaction, the next automatic attempt waits until the context grew by this much
+# llama-server ignores the API's `thinking: disabled`, and a thinking model spends the whole (small) summary budget
+# reasoning without writing a word of summary. Its chat template switch is what turns thinking off.
+NO_THINKING = {"chat_template_kwargs": {"enable_thinking": False}}
+
 
 class CompactionMixin:
     # Provided by LocalAgent / Agent
@@ -24,6 +29,7 @@ class CompactionMixin:
     _measured_len: int
     mode: Any  # AgentMode: what differs between chat and voyager mode (see mode.py)
     compactions: int  # this agent's current round
+    _compact_retry_at: int  # context size below which automatic compaction is not retried (after a failure)
     name: str
 
     def system_prompt(self) -> str:
@@ -52,7 +58,7 @@ class CompactionMixin:
         worth_it = len(self.messages) >= 2 and estimate_tokens(self.messages) >= 1000  # guards tiny windows against thrash
         if self.mode.defer_compaction(estimate, worth_it):
             return  # e.g. voyager mode: let the agent save its state before its context is summarized
-        if self.compact_requested or (worth_it and estimate >= limit):
+        if self.compact_requested or (worth_it and estimate >= limit and estimate >= self._compact_retry_at):
             await self.compact()
 
     async def compact(self) -> bool:
@@ -74,19 +80,22 @@ class CompactionMixin:
             prompt = f"<conversation>\n{transcript_text(self.messages)}\n</conversation>\n\n{self.mode.compact_instructions}"
             async with self.session.client.messages.stream(
                 model=cfg.model, max_tokens=cfg.compact_max_tokens, system=COMPACT_SYSTEM,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": prompt}], extra_body=NO_THINKING,
             ) as stream:
                 async for text in stream.text_stream:
                     log.delta(item, text)
                     summary += text
         except anthropic.APIError as e:  # summarizing failed: keep the history as it is and carry on
             log.add("error", f"compaction failed ({e}); continuing without it")
+            self._compact_retry_at = self.context_estimate() + COMPACT_RETRY_TOKENS
             return False
         finally:
             log.end(item)
         if not summary.strip():
-            log.add("error", "compaction produced an empty summary; history kept")
+            log.add("error", "compaction produced an empty summary (the model used its output budget without writing one); history kept")
+            self._compact_retry_at = self.context_estimate() + COMPACT_RETRY_TOKENS  # don't redo minutes of work at every step
             return False
+        self._compact_retry_at = 0
         self.messages = [summary_message(summary, last_user_request(self.messages), self.mode.summary_note, self.mode.pinned())]
         self._measured_tokens, self._measured_len = None, 0
         await self.mode.after_compact()

@@ -34,6 +34,7 @@ class LocalAgent(CompactionMixin, Agent):
         self._measured_tokens: int | None = None  # prompt+output tokens the server reported for the last call
         self._measured_len = 0  # len(self.messages) that measurement covers
         self.mode = session.mode.for_agent(self)  # chat or voyager behaviour (see mode.py)
+        self._compact_retry_at = 0  # see CompactionMixin
         self.compactions = 0  # how many times this agent's context was compacted: its current *round* (transcript.py)
 
     @property

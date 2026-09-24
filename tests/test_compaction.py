@@ -1,3 +1,5 @@
+import copy
+
 from conftest import run
 from voyager.compaction import estimate_tokens, last_user_request, summary_message, transcript_text
 from voyager.config import load_system_prompt
@@ -68,6 +70,52 @@ def test_compact_replaces_discussion_and_keeps_system_prompt(cfg):
     # ...and the agent's real system prompt is still what every later request carries
     assert "main agent of an interactive coding CLI" in main.system_prompt()
     assert main.system_prompt() == load_system_prompt(cfg, "MAIN", agent_id="main", agent_name="main")
+
+
+class ThinkingOnlyClient(FakeClient):
+    """A model that spends its whole output budget thinking: the stream carries no summary text at all."""
+
+    def stream(self, **kw):
+        stream = FakeStream(self.calls, kw)
+        stream.__class__ = type("Silent", (FakeStream,), {"text_stream": property(lambda self: _nothing())})
+        return stream
+
+
+async def _nothing():
+    return
+    yield
+
+
+def test_the_summary_request_turns_thinking_off(cfg):
+    from voyager.session import Session
+    client = FakeClient()
+    s = Session(cfg, client=client)
+    s.main.messages = list(MSGS)
+    run(s.main.compact())
+    # llama-server ignores `thinking: disabled`; without its template switch the model thinks away the whole budget
+    assert client.calls[0]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_an_empty_summary_keeps_the_history_and_is_not_retried_at_every_step(cfg):
+    from voyager.session import Session
+    client = ThinkingOnlyClient()
+    s = Session(cfg, client=client)
+    m = s.main
+    m.messages = [copy.deepcopy(x) for x in MSGS * 4]
+    over = int(cfg.context_window * cfg.compact_at) + 1
+    m._measured_tokens, m._measured_len = over, len(m.messages)
+    run(m._maybe_compact())
+    assert len(client.calls) == 1 and len(m.messages) == 12  # failed: the history is untouched
+    assert any("empty summary" in i.text for i in m.log.items if i.kind == "error")
+    run(m._maybe_compact())
+    assert len(client.calls) == 1  # the very next step does not redo (minutes of) work that just failed
+    m._measured_tokens = over + 9000  # the context kept growing
+    run(m._maybe_compact())
+    assert len(client.calls) == 2  # ... and then it tries again
+    m._measured_tokens = over
+    m.compact_requested = True
+    run(m._maybe_compact())
+    assert len(client.calls) == 3  # a manual /compact always goes through
 
 
 def test_auto_trigger_uses_context_window(cfg):
