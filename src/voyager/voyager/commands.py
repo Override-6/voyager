@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 
 def _listing(ctl: "Controller") -> str:
     """One row per workspace (the current one starred), or a hint when there are none."""
-    cfg, current = ctl.session.cfg, ctl.session.workspace
-    rows = [f"{'*' if current and w.root == current.root else ' '} {w.name:<24}{ago(w.updated):<10}{w.objective_line()[:70]}"
+    cfg, current = ctl.session.cfg, ctl.session.workspace_name  # not `.workspace`: a daemon replica has only the name
+    rows = [f"{'*' if w.name == current else ' '} {w.name:<24}{ago(w.updated):<10}{w.objective_line()[:70]}"
             for w in Workspace.list_all(cfg.workspaces_dir)]
     return "\n".join(rows) if rows else f"no workspaces yet in {cfg.workspaces_dir}"
 

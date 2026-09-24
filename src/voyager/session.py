@@ -43,6 +43,7 @@ class Session:
         # chat or voyager: a session is in voyager mode when its cwd is a workspace (so a resumed one finds it by itself)
         self.mode = mode_for(cfg)
         self.workspace = self.mode.workspace  # None in chat mode
+        self.workspace_name = self.workspace.name if self.workspace else None  # what a daemon replica also has (it has no Workspace)
         self.events = EventWriter(self)  # live events.jsonl, for monitoring from outside (see events.py)
         self.transcript = TranscriptWriter(self)  # the permanent, complete record (see transcript.py)
         self.hooks: list[Hook] = [self.events, self.transcript]  # front ends subscribe to every agent's log events here

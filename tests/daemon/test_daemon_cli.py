@@ -94,6 +94,22 @@ def test_tui_runs_on_a_replica_like_on_a_session(cfg, offline):
     run(go())
 
 
+def test_workspace_listing_works_on_a_replica(cfg, offline):
+    from voyager.voyager.workspace import Workspace
+
+    async def go():
+        Workspace.create(cfg.workspaces_dir, "recon", "Enumerate the API.")
+        s, srv, rs = await attach(cfg, Session(cfg))
+        ctl = Controller(rs)
+        for cmd in ("/workspace", "/voyager"):  # they read the current workspace, which a replica only knows by name
+            ctl.command(cmd)
+            assert "  recon" in ctl.focused.log.items[-1].text
+        ctl.command("/workspace nope")
+        assert "no such workspace" in ctl.flash
+        await close(s, srv, rs)
+    run(go())
+
+
 def test_a_local_session_cannot_detach(cfg):
     async def go():
         ctl = Controller(Session(cfg))
