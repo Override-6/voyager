@@ -167,6 +167,19 @@ def test_resuming_a_saved_session_starts_a_daemon_for_it_then_reuses_that_one(cf
     run(go())
 
 
+def test_resume_attaches_to_a_live_session_that_was_never_saved(cfg, offline):
+    from voyager.daemon.backend import open_first
+
+    async def go():
+        s, srv, rs = await attach(cfg, Session(cfg))  # still in its first turn: no session.json yet
+        assert not (s.dir / "session.json").exists()
+        again = await open_first(cfg, prompt=None, resume=s.id, use_latest=False)
+        assert again.id == s.id
+        again.close()
+        await close(s, srv, rs)
+    run(go())
+
+
 def test_cli_flags_for_daemons_parse_and_route(cfg, monkeypatch, capsys):
     p = cli.build_parser()
     a = p.parse_args(["--detach", "--voyager", "quest", "--idle-exit", "600", "beat the boss"])

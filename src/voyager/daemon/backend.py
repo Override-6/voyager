@@ -41,8 +41,10 @@ class DaemonBackend:
 async def open_first(cfg: Config, *, prompt: str | None, resume: str | None, use_latest: bool) -> RemoteSession:
     """The session the TUI starts on: a new one (with `prompt`), or a resumed one (live daemon first, else a new daemon)."""
     if resume is not None or use_latest:
-        sid = resolve_saved(cfg, resume or None)
-        live = find_live(cfg.sessions_dir, sid) or await spawn(cfg, resume=sid, prompt=prompt)
+        live = find_live(cfg.sessions_dir, resume) if resume else None  # first: a session still in its first turn is not saved yet
+        if live is None:
+            sid = resolve_saved(cfg, resume or None)
+            live = find_live(cfg.sessions_dir, sid) or await spawn(cfg, resume=sid, prompt=prompt)
     else:
         live = await spawn(cfg, prompt=prompt)
     return await RemoteSession(cfg, live.sock).connect()
