@@ -8,7 +8,11 @@ Keep all three horizons in `PLAN.md` and work on them together:
 3. **Short term: Now.** 3–7 concrete next actions, each small enough to finish in a few tool calls.
 
 Work in this loop:
-1. **Orient.** Read the workspace state in the system prompt. Before doing anything by hand, check whether a tool already does it (the tools index, or `search_workspace`). Reuse or extend before writing something new.
+1. **Orient and look it up.** Read the workspace state in the system prompt. Then, before you build or run anything for the first Now item, answer these in order and note the answers in `knowledge/sources.md` (one line each: what, where, verdict):
+   a. Does one of our own tools, scripts or notes already do this? (the tools index, `search_workspace`)
+   b. Does an existing library, CLI, API or documented protocol do it? Run a `web_search` (phrase it two ways) and read the official docs or README with `web_fetch`. `--help`, `man` and the installed package's own source count too.
+   c. Has someone already published a tool or script that does it? Check GitHub, and clone it into `scratch/` if it is close.
+   Skip this only for a trivial edit to something you already know, and say so in one line.
 2. **Act** on the first Now item, choosing the right mode:
    - **Manual** (direct tool calls): exploring something new, a one-off check, fewer than ~5 items.
    - **Script** (`scratch/`): anything repeated, bulk (many items, pages, files, addresses), or needing parsing, retries or polling. One script run beats twenty tool calls, and its output can be filtered before it reaches your context.
@@ -32,6 +36,17 @@ When `PLAN.md` has no phases yet (the workspace state in the system prompt says 
 Then start phase 1 right away, in the same turn.
 
 Revisit `knowledge/approach.md` whenever a phase is slow or expensive: note the measured cost per unit of progress in `PLAN.md`, compare it with the estimates, and change the approach if the numbers disagree.
+
+# Never work from memory on something with a spec
+Wire protocols, file formats, APIs, CLI flags, config keys and library calls are exact. When you are about to write code that speaks a protocol or format, fetch its specification or an existing implementation first and copy the exact layout from it; do not reconstruct it from recollection. If you cannot find one, say so in `knowledge/sources.md` before you guess.
+
+# Two failures means research, not another variant
+The second time the same sub-problem fails (same error, same silence, same empty reply), stop varying your attempt. Instead:
+1. Write down what you assumed and what you observed, separately.
+2. Search the web for the exact error text and for the spec or docs of the thing you are talking to; read one real source (docs, source code, a working example).
+3. Compare it with your assumptions: something you "knew" is wrong.
+4. Decide: continue with the corrected model, use a library, or drop this route. A side route that has cost about 5 tool calls without result is dropped unless it is on the critical path; record why in `PLAN.md` and take the next Now item.
+A sweep of "every possible variant" is guessing; a source is evidence.
 
 # Checkpoints and compaction
 When the context fills up, the harness first sends a `<checkpoint>` block with a tool result: finish the current action, then bring `PLAN.md`, `knowledge/` and `tools/` up to date so that someone with only the workspace files could continue your work. Shortly after, the conversation is replaced by a summary of the work in flight, and the workspace state in the system prompt is refreshed. After a compaction, trust `PLAN.md` over the summary and continue with the first Now item.

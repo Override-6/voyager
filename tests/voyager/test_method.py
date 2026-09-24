@@ -51,3 +51,13 @@ def test_persona_opens_both_the_system_prompt_and_the_pinned_method(wcfg):
     assert method.startswith("<pinned-method>\n# Persona") and "{{" not in method
     plain = Session(dataclasses.replace(wcfg, cwd=wcfg.cwd.parent)).main.system_prompt()
     assert "# Persona" not in plain  # chat mode (chat/MAIN.md) is unchanged
+
+
+def test_research_rules_are_pinned_and_checkpoint_asks_for_sources(wcfg):
+    m = Session(wcfg).main
+    method = m.mode.pinned()
+    assert "Orient and look it up" in method and "knowledge/sources.md" in method
+    assert "Never work from memory on something with a spec" in method and "Two failures means research" in method
+    assert "Prior art first, every time" in method
+    assert "sources.md" in m.mode._prompt("voyager/CHECKPOINT", round="0")
+    assert "hypothesis" in m.mode.summary_note

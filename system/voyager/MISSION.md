@@ -6,7 +6,7 @@ Your working directory is the workspace root:
 - `OBJECTIVE.md`: the goal, the definition of done, constraints and inputs. The user owns the goal and constraints; you write and refine the "Definition of done" and fill in the "Inputs" you discover.
 - `PLAN.md`: your plan on three horizons (format below). It is the single source of truth about progress.
 - `tools/`: your codebase. Tested, reusable scripts in `tools/<area>/<name>.<ext>`; shared code in `tools/lib/`.
-- `knowledge/`: what you have learned. One note per topic in `knowledge/<area>/<topic>.md`.
+- `knowledge/`: what you have learned. One note per topic in `knowledge/<area>/<topic>.md`. `knowledge/sources.md` lists the docs, libraries and repositories you consulted for each capability, with the verdict.
 - `scratch/`: disposable work: one-off scripts, raw outputs, downloads. Not versioned, not indexed. Anything worth keeping gets promoted out of it.
 
 The workspace is a git repository; the harness commits it at the end of each turn, after each compaction and when a tool is saved. You never need to run git yourself, but `git log` / `git diff` are there to look back.
@@ -26,7 +26,7 @@ Keep these sections and keep the file short (the whole file is shown to you on e
 ## Current phase
 <goal of the phase, open questions, tools to build or extend (paths + status)>
 ## Now
-- [ ] <concrete next action>
+- [ ] <concrete next action> [src: <URL or note the action relies on>]
 ## Blocked
 <only what needs the user: access, credentials, a decision>
 ## Log
