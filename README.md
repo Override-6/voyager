@@ -113,6 +113,9 @@ One folder per mode (`chat/`, `voyager/`); what both share (`LOCAL.md`, `CODER.m
 | `chat/MAIN.md` | the main agent outside a workspace. References `AGENTS.md`, and contains the **privacy rule**: never tell the Coder what is really being done, send no personal data / proprietary code, abstract every task |
 | `LOCAL.md` | `local` sub-agents (both modes) |
 | `CODER.md` | `coder` agents (`claude --system-prompt`) |
+| `COMPACT_SYSTEM.md`, `SUMMARY.md` | compaction, both modes: the summarizer's system prompt, and the message that carries the summary (`{{summary}}`) into the next context |
+| `chat/COMPACT.md`, `voyager/COMPACT.md` | what the summarizer is asked to write (sections, word limit): everything you'd tune about the summaries is here |
+| `voyager/CHECKPOINT.md`, `voyager/AFTER_COMPACT.md` | voyager mode: the request to save state to the workspace before a compaction (`{{round}}`), and the note added to the summary after it |
 
 `{{cwd}} {{platform}} {{date}} {{agent_id}} {{agent_name}} {{agents_md}}` are substituted, plus `{{ws_name}} {{workspace_state}} {{persona}}` in voyager mode (empty outside it). Files are re-read on every request, so edits apply immediately.
 Override the folder with `--system-dir` / `VOYAGER_SYSTEM_DIR`.
@@ -259,7 +262,7 @@ src/voyager/
   tools/                                bash, read/write/edit_file, glob, grep, tasks, agents, web (web.py, websearch.py)
   mcpclient/                            MCP: config, lazy server connection, tool wrappers, schema cache
   tui/                                  wrap, render, panes, controller, commands, picker, keys, app  (prompt_toolkit)
-system/  chat/MAIN.md  voyager/MISSION.md PERSONA.md METHOD.md  LOCAL.md CODER.md
+system/  chat/{MAIN,COMPACT}.md  voyager/{MISSION,PERSONA,METHOD,COMPACT,CHECKPOINT,AFTER_COMPACT}.md  LOCAL.md CODER.md COMPACT_SYSTEM.md SUMMARY.md
 tests/   pytest (offline: fake `claude`, no network); chat/ and voyager/ hold each mode's tests
 ```
 

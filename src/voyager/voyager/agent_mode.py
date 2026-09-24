@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..config import load_system_prompt
 from ..mode import AgentMode
 from .approach import gate_text
-from .compaction import CHECKPOINT, CHECKPOINT_GAP, HARD_GAP, WORKSPACE_COMPACT_INSTRUCTIONS, WORKSPACE_NOTE
+from .compaction import CHECKPOINT_GAP, HARD_GAP
 from .evidence import record
 from .nudge import maybe_nudge
 from .prompts import method_prompt, mission_prompt
@@ -19,8 +20,6 @@ if TYPE_CHECKING:
 
 class VoyagerAgentMode(AgentMode):
     name = "voyager"
-    compact_instructions = WORKSPACE_COMPACT_INSTRUCTIONS
-    summary_note = WORKSPACE_NOTE
     resume_note = "Your workspace state in the system prompt is current: trust PLAN.md over your memory of it, and take the first Now item."
 
     def __init__(self, agent: "Agent", ws: "Workspace") -> None:
@@ -39,6 +38,17 @@ class VoyagerAgentMode(AgentMode):
         return "MISSION" if self.agent.is_main else "LOCAL"
 
     # ---------------------------------------------------------------- prompts
+    def _prompt(self, name: str, **extra: str) -> str:
+        return load_system_prompt(self.agent.session.cfg, name, extra=extra).strip()
+
+    @property
+    def compact_instructions(self) -> str:  # type: ignore[override]
+        return self._prompt("voyager/COMPACT")
+
+    @property
+    def summary_note(self) -> str:  # type: ignore[override]
+        return self._prompt("voyager/AFTER_COMPACT")
+
     def system_prompt(self) -> str:
         a = self.agent
         if self.state is None:  # a snapshot, not live: a stable prompt prefix between refreshes
@@ -88,7 +98,7 @@ class VoyagerAgentMode(AgentMode):
         last = self.agent.messages[-1]
         if isinstance(last["content"], str):
             last["content"] = [{"type": "text", "text": last["content"]}]
-        last["content"].append({"type": "text", "text": CHECKPOINT.replace("{round}", str(self.round))})
+        last["content"].append({"type": "text", "text": self._prompt("voyager/CHECKPOINT", round=str(self.round))})
         self.checkpointed = True
         self.agent.log.add("notice", "⚑ checkpoint: asked the agent to save its state to the workspace before compaction",
                            event="checkpoint")

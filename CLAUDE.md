@@ -42,7 +42,8 @@ user-facing reference (features, commands, flags); this file is for working on t
   `tasks`, `hooks`, `mode`, `cfg`, `leave`...). If the TUI starts reading something new from the session or an agent, add it to the protocol
   (`protocol.py`) and the replica, and cover it in `tests/daemon/`. `--local` (and the tests) use a plain in-process `Session` through `tui/backend.py`.
 - System prompts are files in `system/` (`chat/MAIN.md`, `voyager/MISSION.md` + `METHOD.md` + `PERSONA.md`, and `LOCAL.md` sub-agents /
-  `CODER.md` shared), re-read on every request; `{{placeholders}}` are filled by `config.load_system_prompt`.
+  `CODER.md` shared; the compaction prompts too: `COMPACT_SYSTEM.md`, `SUMMARY.md`, `{chat,voyager}/COMPACT.md`, `voyager/CHECKPOINT.md`,
+  `voyager/AFTER_COMPACT.md`). Model-facing text goes in these files, never hardcoded in Python. They are re-read on every request; `{{placeholders}}` are filled by `config.load_system_prompt`.
 
 ## Voyager mode: invariants to preserve
 - A session is in voyager mode (in a workspace) iff its cwd is inside `cfg.workspaces_dir` (`Workspace.at`); nothing else is persisted for it.

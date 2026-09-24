@@ -16,15 +16,15 @@ def test_transcript_clips_tool_results_and_has_no_system_prompt():
     assert "USER: fix the bug" in t and "called read_file" in t and len(t) < 2500
 
 
-def test_last_user_request_skips_tool_results():
+def test_last_user_request_skips_tool_results(cfg):
     assert last_user_request(MSGS) == "fix the bug in calc.py"
-    assert "fix the bug" in summary_message("done stuff", "fix the bug")["content"]
+    assert "fix the bug" in summary_message(cfg, "done stuff", "fix the bug")["content"]
 
 
-def test_pinned_text_is_always_marked_so_it_stays_out_of_summaries():
+def test_pinned_text_is_always_marked_so_it_stays_out_of_summaries(cfg):
     from voyager.compaction import pinned_block
     assert pinned_block("<pinned-method>\nx\n</pinned-method>")["text"].startswith("<pinned-method>")  # already tagged
-    msg = summary_message("s", "req", pinned="untagged rules")  # a mode pinning plain text
+    msg = summary_message(cfg, "s", "req", pinned="untagged rules")  # a mode pinning plain text
     assert msg["content"][0]["text"] == "<pinned>\nuntagged rules\n</pinned>"
     assert "untagged rules" not in transcript_text([msg]) and last_user_request([msg]).startswith("[The earlier")
 

@@ -1,0 +1,1 @@
+Your workspace state in the system prompt (OBJECTIVE.md, PLAN.md, tools and knowledge indexes) was just refreshed: it is the source of truth. Where it disagrees with this summary, trust PLAN.md. Resume with the first Now item; the objective is not reached yet, so keep working without ending your turn.

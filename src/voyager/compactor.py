@@ -7,7 +7,7 @@ from typing import Any
 import anthropic
 
 from .compaction import (
-    COMPACT_SYSTEM, estimate_tokens, last_user_request, pinned_block, summary_message, transcript_text,
+    compact_system, estimate_tokens, last_user_request, pinned_block, summary_message, transcript_text,
 )
 
 COMPACT_RETRY_TOKENS = 8000  # after a failed compaction, the next automatic attempt waits until the context grew by this much
@@ -22,7 +22,7 @@ def _summary_budget(cfg: Any, prompt: str) -> int:
     """Output cap of the summary request: the configured one, else everything the context window leaves after the prompt."""
     if cfg.compact_max_tokens:
         return cfg.compact_max_tokens
-    room = cfg.context_window - estimate_tokens(prompt) - estimate_tokens(COMPACT_SYSTEM) - SUMMARY_MARGIN
+    room = cfg.context_window - estimate_tokens(prompt) - estimate_tokens(compact_system(cfg)) - SUMMARY_MARGIN
     return max(MIN_SUMMARY_TOKENS, room)
 
 
@@ -89,7 +89,7 @@ class CompactionMixin:
         try:
             prompt = f"<conversation>\n{transcript_text(self.messages)}\n</conversation>\n\n{self.mode.compact_instructions}"
             async with self.session.client.messages.stream(
-                model=cfg.model, max_tokens=_summary_budget(cfg, prompt), system=COMPACT_SYSTEM,
+                model=cfg.model, max_tokens=_summary_budget(cfg, prompt), system=compact_system(cfg),
                 messages=[{"role": "user", "content": prompt}], extra_body=NO_THINKING,
             ) as stream:
                 async for text in stream.text_stream:
@@ -106,7 +106,7 @@ class CompactionMixin:
             self._compact_retry_at = self.context_estimate() + COMPACT_RETRY_TOKENS  # don't redo minutes of work at every step
             return False
         self._compact_retry_at = 0
-        self.messages = [summary_message(summary, last_user_request(self.messages), self.mode.summary_note, self.mode.pinned())]
+        self.messages = [summary_message(cfg, summary, last_user_request(self.messages), self.mode.summary_note, self.mode.pinned())]
         self._measured_tokens, self._measured_len = None, 0
         await self.mode.after_compact()
         after = self.context_estimate()  # summary + system prompt + tools

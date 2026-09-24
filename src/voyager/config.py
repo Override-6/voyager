@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_URL = "http://127.0.0.1:8080"  # the local llama-server
-PROMPT_DIRS = {"MAIN": "chat", "MISSION": "voyager", "METHOD": "voyager", "PERSONA": "voyager"}  # others (LOCAL, CODER): system/
+PROMPT_DIRS = {"MAIN": "chat", "MISSION": "voyager", "METHOD": "voyager", "PERSONA": "voyager"}  # others (LOCAL, CODER, SUMMARY...): system/
 DEFAULT_SYSTEM_DIR = Path(__file__).resolve().parents[2] / "system"
 DEFAULT_MCP_CONFIG = Path(__file__).resolve().parents[2] / "mcp.json"
 
@@ -111,7 +111,8 @@ def load_system_prompt(
 
     Layout: system/chat/ (chat mode), system/voyager/ (voyager mode), and system/ itself for what both share.
     """
-    path = cfg.system_dir / PROMPT_DIRS.get(name, "") / f"{name}.md"
+    folder = "" if "/" in name else PROMPT_DIRS.get(name, "")  # a name may spell its folder: "chat/COMPACT"
+    path = cfg.system_dir / folder / f"{name}.md"
     if not path.is_file():
         raise FileNotFoundError(f"system prompt not found: {path} (set VOYAGER_SYSTEM_DIR?)")
     text = path.read_text(encoding="utf-8")

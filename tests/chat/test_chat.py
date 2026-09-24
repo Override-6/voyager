@@ -33,5 +33,20 @@ def test_chat_has_no_pinned_text_no_extra_state_and_no_checkpoint(cfg):
 
 def test_system_prompt_files_are_laid_out_by_mode(cfg):
     d = cfg.system_dir
-    assert (d / "chat" / "MAIN.md").is_file() and (d / "LOCAL.md").is_file() and (d / "CODER.md").is_file()
-    assert {p.name for p in (d / "voyager").iterdir()} == {"MISSION.md", "METHOD.md", "PERSONA.md"}
+    assert {p.name for p in d.iterdir() if p.is_file()} == {"LOCAL.md", "CODER.md", "COMPACT_SYSTEM.md", "SUMMARY.md"}  # shared by both modes
+    assert {p.name for p in (d / "chat").iterdir()} == {"MAIN.md", "COMPACT.md"}
+    assert {p.name for p in (d / "voyager").iterdir()} == {"MISSION.md", "METHOD.md", "PERSONA.md", "COMPACT.md", "CHECKPOINT.md", "AFTER_COMPACT.md"}
+
+
+def test_the_compaction_prompts_are_files_and_editable_without_touching_code(cfg, tmp_path):
+    import dataclasses, shutil
+    from voyager.compaction import compact_system, summary_message
+    assert "summarize the transcript" in compact_system(cfg).lower() and "{{" not in compact_system(cfg)
+    custom = tmp_path / "system"
+    shutil.copytree(cfg.system_dir, custom)
+    (custom / "COMPACT_SYSTEM.md").write_text("Custom summarizer.\n")
+    (custom / "SUMMARY.md").write_text("<summary>{{summary}}</summary> custom wrapper\n")
+    c2 = dataclasses.replace(cfg, system_dir=custom)
+    assert compact_system(c2) == "Custom summarizer."
+    assert summary_message(c2, " the gist ", "")["content"] == "<summary>the gist</summary> custom wrapper"
+    assert "2000 words" in Session(cfg).main.mode.compact_instructions  # read from system/chat/COMPACT.md

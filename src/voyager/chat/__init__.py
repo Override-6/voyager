@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..compaction import COMPACT_INSTRUCTIONS
 from ..config import load_system_prompt
 from ..mode import AgentMode, Mode
 
@@ -14,11 +13,14 @@ if TYPE_CHECKING:
 
 class ChatAgentMode(AgentMode):
     name = "chat"
-    compact_instructions = COMPACT_INSTRUCTIONS
 
     @property
     def prompt_name(self) -> str:  # type: ignore[override]
         return "MAIN" if self.agent.is_main else "LOCAL"
+
+    @property
+    def compact_instructions(self) -> str:  # type: ignore[override]
+        return load_system_prompt(self.agent.session.cfg, "chat/COMPACT").strip()
 
     def system_prompt(self) -> str:
         a = self.agent

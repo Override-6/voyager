@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cwd", type=Path, help="working directory (default: current)")
     p.add_argument("--coder-model", help="model alias passed to `claude --model` (default: sonnet)")
     p.add_argument("--coder-cwd", type=Path, help="directory the Coder agent works in (default: per-agent scratch dir)")
-    p.add_argument("--system-dir", type=Path, help="system prompts folder: chat/MAIN.md, voyager/{MISSION,METHOD,PERSONA}.md, LOCAL.md, CODER.md")
+    p.add_argument("--system-dir", type=Path, help="system prompts folder (see system/ for the layout: chat/, voyager/, and the shared LOCAL, CODER, COMPACT_SYSTEM, SUMMARY)")
     p.add_argument("--voyager", metavar="NAME", help="voyager mode: work in workspace NAME (created if new, with the prompt as its "
                    "objective; the prompt starts the mission). Default mode is chat")
     p.add_argument("--workspace", metavar="NAME", help="work in this existing workspace (cwd = its folder); --voyager also creates")

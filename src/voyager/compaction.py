@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .config import Config, load_system_prompt
 from .tools.base import clip
 
 CHARS_PER_TOKEN = 3.2  # conservative for code-heavy text
@@ -25,26 +26,11 @@ TOOL_ARGS_CLIP = 400
 LAST_REQUEST_MAX_CHARS = 4000
 PINNED_PREFIX = "<pinned"  # marks a pinned block (e.g. <pinned-method>): never summarized nor quoted as a user request
 
-COMPACT_SYSTEM = (
-    "You summarize the transcript of a coding-agent session so the agent can continue after its context is "
-    "cleared. Be precise and factual; keep exact file paths, function names, commands and error messages. "
-    "Do not call tools and do not continue the task. Output only the summary."
-)
 
-COMPACT_INSTRUCTIONS = """Summarize the conversation above for the agent that will continue it. Use these sections, be thorough but not padded (under 2000 words in total):
-1. User request and intent: what the user asked for (quote the latest request verbatim).
-2. Work done: files read / created / modified (paths + what changed and why), commands run and their key results.
-3. Findings and decisions: facts learned about the code, decisions taken, errors hit and how they were fixed.
-4. Agents and background tasks: ids (a1, t1, ...), what each was for, status / results received so far.
-5. Current state and next steps: what is in progress and the concrete next action. State explicitly which steps are already complete so they are not repeated, and keep the key facts (values, signatures, line numbers) needed to finish without re-reading."""
-
-SUMMARY_WRAPPER = (
-    "[The earlier conversation was compacted to free up context. Your system prompt and tools are unchanged. "
-    "Summary of the conversation so far:]\n\n<summary>\n{summary}\n</summary>\n\n"
-    "Continue from where you left off. The summary lists work that is ALREADY DONE: do not repeat those steps "
-    "(do not re-read files or re-run commands unless you truly need details the summary lacks). "
-    "Do not mention this summary unless it matters."
-)
+def compact_system(cfg: Config) -> str:
+    """The summarizer's system prompt (system/COMPACT_SYSTEM.md). The instructions, the wrapper that carries the summary
+    into the next context and the checkpoint are files too: system/{chat,voyager}/COMPACT.md, system/SUMMARY.md, ..."""
+    return load_system_prompt(cfg, "COMPACT_SYSTEM").strip()
 
 
 def estimate_tokens(obj: Any) -> int:
@@ -106,9 +92,9 @@ def last_user_request(messages: list[dict[str, Any]]) -> str:
     return ""
 
 
-def summary_message(summary: str, last_request: str, note: str = "", pinned: str = "") -> dict[str, Any]:
+def summary_message(cfg: Config, summary: str, last_request: str, note: str = "", pinned: str = "") -> dict[str, Any]:
     """The user message that replaces the discussion. `note`: a mode's addendum; `pinned`: text to re-pin at the top."""
-    text = SUMMARY_WRAPPER.format(summary=summary.strip()) + note
+    text = load_system_prompt(cfg, "SUMMARY", extra={"summary": summary.strip()}).strip() + (f"\n\n{note}" if note else "")
     if last_request:
         text += f"\n\nLatest user request (verbatim; it may already be partly done, see the summary):\n{last_request}"
     if pinned:
