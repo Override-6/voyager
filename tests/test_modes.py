@@ -45,7 +45,8 @@ def test_a_resumed_session_goes_back_to_work_only_if_it_was_interrupted(cfg, off
         saved_session(cfg, "m1", "assistant", "done", where=wcfg)
         assert Session.load(cfg, "m1").resume_work() is True  # phase 0: no approach recorded yet
         (ws.root / "PLAN.md").write_text("# Plan\n## Phases\n- [>] 1. Recon — exit: x\n## Now\n- [ ] a\n## Blocked\n- need a key\n## Log\n")
-        assert Session.load(cfg, "m1").resume_work() is False
+        saved_session(cfg, "m3", "assistant", "done", where=wcfg)  # saved after the edit: nothing changed while it was down
+        assert Session.load(cfg, "m3").resume_work() is False
         saved_session(cfg, "m2", "assistant", "stopped", where=wcfg)
         (ws.root / "PLAN.md").write_text("# Plan\n## Phases\n- [>] 1. Recon — exit: x\n## Now\n- [ ] a\n## Blocked\n## Log\n")
         back = Session.load(cfg, "m2")

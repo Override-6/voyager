@@ -165,7 +165,9 @@ def test_checkpoint_before_compaction_then_new_round(wcfg, ws):
     assert "work in flight" in client.calls[0]["messages"][0]["content"]
     assert "trust PLAN.md" in m.messages[0]["content"][-1]["text"] and "<checkpoint>" not in m.messages[0]["content"][-1]["text"]
     assert "main r0 compacted: 1. Recon" in git_log(ws)
-    assert m.extra_state() == {"round": 1, "checkpointed": False, "compactions": 1}
+    extra = m.extra_state()
+    assert {k: extra[k] for k in ("round", "checkpointed", "compactions")} == {"round": 1, "checkpointed": False, "compactions": 1}
+    assert set(extra["files"]) == {"OBJECTIVE.md", "PLAN.md", "knowledge/approach.md"}
 
 
 def test_checkpoint_defers_compaction_once_unless_near_full(wcfg):

@@ -12,6 +12,7 @@ from .evidence import record
 from .nudge import maybe_nudge
 from .prompts import method_prompt, mission_prompt
 from .state import state_block
+from .watch import changed, changed_note, fingerprint
 
 if TYPE_CHECKING:
     from ..agent import Agent
@@ -20,11 +21,13 @@ if TYPE_CHECKING:
 
 class VoyagerAgentMode(AgentMode):
     name = "voyager"
-    resume_note = "Your workspace state in the system prompt is current: trust PLAN.md over your memory of it, and take the first Now item."
+    RESUME_TEXT = "Your workspace state in the system prompt is current: trust PLAN.md over your memory of it, and take the first Now item."
 
     def __init__(self, agent: "Agent", ws: "Workspace") -> None:
         super().__init__(agent)
         self.ws = ws
+        self.baseline: dict[str, str] | None = fingerprint(ws)  # key files as the current round started
+        self._stopped: dict[str, str] | None = None  # key files as the session last saved (None: an old save, or new)
         self.round = 0  # compactions so far (one "round" of work per context)
         self.checkpointed = False  # the <checkpoint> request was sent this round
         self.state: str | None = None  # workspace state snapshot in the system prompt (None: take a new one)
@@ -47,7 +50,17 @@ class VoyagerAgentMode(AgentMode):
 
     @property
     def summary_note(self) -> str:  # type: ignore[override]
-        return self._prompt("voyager/AFTER_COMPACT")
+        """Read before `after_compact` resets the baseline: names the key files edited during the round that ended."""
+        note = changed_note(self.agent.session.cfg, changed(self.baseline, fingerprint(self.ws)))
+        return "\n\n".join(p for p in (self._prompt("voyager/AFTER_COMPACT"), note) if p)
+
+    def resume_note(self) -> str:
+        """The files the user (or anything else) edited while the session was stopped."""
+        note = changed_note(self.agent.session.cfg, self._changed_while_stopped())
+        return " ".join(p for p in (self.RESUME_TEXT, note) if p)
+
+    def _changed_while_stopped(self) -> list[str]:
+        return changed(self._stopped, fingerprint(self.ws))
 
     def system_prompt(self) -> str:
         a = self.agent
@@ -62,16 +75,25 @@ class VoyagerAgentMode(AgentMode):
 
     # ------------------------------------------------------------------ state
     def extra_state(self) -> dict[str, Any]:
-        return {"round": self.round, "checkpointed": self.checkpointed}
+        """`files` is the round's baseline, `files_saved` the key files right now (what a resume compares against)."""
+        return {"round": self.round, "checkpointed": self.checkpointed, "files": self.baseline, "files_saved": fingerprint(self.ws)}
 
     def load_extra_state(self, extra: dict[str, Any]) -> None:
         self.round = extra.get("round", 0)
         self.checkpointed = extra.get("checkpointed", False)
+        if extra.get("files") is not None:  # saved by an older version otherwise: keep today's files, flag nothing
+            self.baseline = extra["files"]
+        self._stopped = extra.get("files_saved")
 
     def wants_continue(self) -> bool:
-        """The plan is unfinished (or phase 0 has not chosen its approach yet) and nothing is waiting on the user."""
+        """The plan is unfinished (or phase 0 has not chosen its approach yet) and nothing is waiting on the user.
+
+        Key files edited while the session was stopped also count, even past a Blocked section: that edit is likely the answer."""
         a, ws = self.agent, self.ws
-        return a.is_main and not ws.section("## Blocked") and (ws.unfinished() or (not ws.phases() and bool(gate_text(ws))))
+        if not a.is_main:
+            return False
+        return bool(self._changed_while_stopped()) or (
+            not ws.section("## Blocked") and bool(ws.unfinished() or (not ws.phases() and gate_text(ws))))
 
     def on_submit(self, src: str) -> None:
         if src == "user":  # the user is steering again: the nudge budget starts over
@@ -108,6 +130,7 @@ class VoyagerAgentMode(AgentMode):
         self.round += 1
         self.checkpointed = False
         self.state = None
+        self.baseline = fingerprint(self.ws)
         await self.ws.commit(f"{self.agent.name} r{self.round - 1} compacted: {self.ws.current_phase()}")
         self._round_end_commit = await self.ws.head()
 

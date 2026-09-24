@@ -252,7 +252,7 @@ class Session:
         if not m.messages or not (m.messages[-1]["role"] == "user" or m.outcome in ("stopped", "error") or m.mode.wants_continue()):
             return False
         cut = [f"{a.id} ({a.name})" for a in self.agents.values() if a is not m and a.outcome in ("stopped", "error")]
-        parts = [RESUME_TEXT, m.mode.resume_note, note]
+        parts = [RESUME_TEXT, m.mode.resume_note(), note]
         if cut:
             parts.append(f"Sub-agents that were interrupted by the stop: {', '.join(cut)}. Resume the ones whose work you still need with send_message.")
         m.submit("<resumed>\n" + " ".join(p for p in parts if p) + "\n</resumed>", src="agent",

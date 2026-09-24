@@ -78,6 +78,9 @@ scratch/       throwaway scripts and raw outputs (gitignored, not indexed)
 * **Compaction = checkpoint.** At `checkpoint_at` (default `compact_at - 0.10`) a `<checkpoint>` block asks the agent to save its state to the workspace;
   compaction waits for it (up to `compact_at + 0.15`), then summarizes only the work in flight. Each compaction ends a *round*: the round counter goes up,
   the workspace is committed and the snapshot refreshed.
+* **Changed files.** `OBJECTIVE.md`, `PLAN.md` and `knowledge/approach.md` are hashed when a round starts and when the session is saved. If any changed
+  by the next compaction (`PLAN.md` nearly always does), the summary note tells the agent to re-read them; on `--resume`, the same for files edited
+  while the session was stopped (e.g. you edited `PLAN.md`), which also sends the session back to work even after a clean turn. Older saves are not flagged.
 * **Keep going.** The main agent should end its turn only when the objective is done, it is blocked (written under `## Blocked`), or it is waiting
   for sub-agents / tasks. If it stops with unfinished phases and none of those applies, a `<continue>` message sends it back to work: at most
   `--max-nudges` (default 20) per user message, and never twice in a row without a workspace change (git HEAD moved), so a stuck agent can't loop.
@@ -116,6 +119,7 @@ One folder per mode (`chat/`, `voyager/`); what both share (`LOCAL.md`, `CODER.m
 | `COMPACT_SYSTEM.md`, `SUMMARY.md` | compaction, both modes: the summarizer's system prompt, and the message that carries the summary (`{{summary}}`) into the next context |
 | `chat/COMPACT.md`, `voyager/COMPACT.md` | what the summarizer is asked to write (sections, word limit): everything you'd tune about the summaries is here |
 | `voyager/CHECKPOINT.md`, `voyager/AFTER_COMPACT.md` | voyager mode: the request to save state to the workspace before a compaction (`{{round}}`), and the note added to the summary after it |
+| `voyager/CHANGED_FILES.md` | voyager mode: the "re-read these files" instruction (`{{files}}`), added after a compaction or on resume when key workspace files changed |
 
 `{{cwd}} {{platform}} {{date}} {{agent_id}} {{agent_name}} {{agents_md}}` are substituted, plus `{{ws_name}} {{workspace_state}} {{persona}}` in voyager mode (empty outside it). Files are re-read on every request, so edits apply immediately.
 Override the folder with `--system-dir` / `VOYAGER_SYSTEM_DIR`.
@@ -262,7 +266,7 @@ src/voyager/
   tools/                                bash, read/write/edit_file, glob, grep, tasks, agents, web (web.py, websearch.py)
   mcpclient/                            MCP: config, lazy server connection, tool wrappers, schema cache
   tui/                                  wrap, render, panes, controller, commands, picker, keys, app  (prompt_toolkit)
-system/  chat/{MAIN,COMPACT}.md  voyager/{MISSION,PERSONA,METHOD,COMPACT,CHECKPOINT,AFTER_COMPACT}.md  LOCAL.md CODER.md COMPACT_SYSTEM.md SUMMARY.md
+system/  chat/{MAIN,COMPACT}.md  voyager/{MISSION,PERSONA,METHOD,COMPACT,CHECKPOINT,AFTER_COMPACT,CHANGED_FILES}.md  LOCAL.md CODER.md COMPACT_SYSTEM.md SUMMARY.md
 tests/   pytest (offline: fake `claude`, no network); chat/ and voyager/ hold each mode's tests
 ```
 

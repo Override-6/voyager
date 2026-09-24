@@ -28,10 +28,13 @@ class AgentMode:
     prompt_name = "MAIN"  # the system prompt file (for the "re-applied" notice)
     compact_instructions = ""  # what the summarizer is asked for (a mode sets it)
     summary_note = ""  # appended to the summary message that replaces the discussion
-    resume_note = ""  # added to the message that sends a resumed session back to work
 
     def __init__(self, agent: "Agent") -> None:
         self.agent = agent
+
+    def resume_note(self) -> str:
+        """Added to the message that sends a resumed session back to work (a method: it may look at the disk)."""
+        return ""
 
     def system_prompt(self) -> str:
         raise NotImplementedError

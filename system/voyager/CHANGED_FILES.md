@@ -1,0 +1,1 @@
+These workspace files changed while you were not looking at them (during the round that just ended, or while the session was stopped): {{files}}. Read them with read_file before you continue: the summary, your memory of them and even the copy in your workspace state may be out of date or cut short.
