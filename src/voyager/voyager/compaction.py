@@ -7,7 +7,7 @@ for the generic part.
 
 from __future__ import annotations
 
-WORKSPACE_COMPACT_INSTRUCTIONS = """Summarize the conversation above for the agent that will continue it. Its durable state (OBJECTIVE.md, PLAN.md, tools/, knowledge/) is on disk and shown to it separately: do NOT restate the plan, the tool list or facts already written to knowledge/. Carry only the work in flight, concisely (under 400 words in total):
+WORKSPACE_COMPACT_INSTRUCTIONS = """Summarize the conversation above for the agent that will continue it. Its durable state (OBJECTIVE.md, PLAN.md, tools/, knowledge/) is on disk and shown to it separately: do NOT restate the plan, the tool list or facts already written to knowledge/. Carry only the work in flight, thoroughly but without padding (under 2000 words in total):
 1. Latest user request: quote it verbatim.
 2. Current step: which PLAN.md "Now" item was being worked on, and exactly where it stopped.
 3. Not yet saved: results, values, errors and dead ends from this context that are NOT in the workspace files (say where they should go).

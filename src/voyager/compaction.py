@@ -31,7 +31,7 @@ COMPACT_SYSTEM = (
     "Do not call tools and do not continue the task. Output only the summary."
 )
 
-COMPACT_INSTRUCTIONS = """Summarize the conversation above for the agent that will continue it. Use these sections, be concise (under 600 words in total):
+COMPACT_INSTRUCTIONS = """Summarize the conversation above for the agent that will continue it. Use these sections, be thorough but not padded (under 2000 words in total):
 1. User request and intent: what the user asked for (quote the latest request verbatim).
 2. Work done: files read / created / modified (paths + what changed and why), commands run and their key results.
 3. Findings and decisions: facts learned about the code, decisions taken, errors hit and how they were fixed.
