@@ -14,6 +14,16 @@ COMPACT_RETRY_TOKENS = 8000  # after a failed compaction, the next automatic att
 # llama-server ignores the API's `thinking: disabled`, and a thinking model spends the whole (small) summary budget
 # reasoning without writing a word of summary. Its chat template switch is what turns thinking off.
 NO_THINKING = {"chat_template_kwargs": {"enable_thinking": False}}
+SUMMARY_MARGIN = 1500  # tokens kept free in the window beyond the prompt estimate (which is already conservative)
+MIN_SUMMARY_TOKENS = 1024
+
+
+def _summary_budget(cfg: Any, prompt: str) -> int:
+    """Output cap of the summary request: the configured one, else everything the context window leaves after the prompt."""
+    if cfg.compact_max_tokens:
+        return cfg.compact_max_tokens
+    room = cfg.context_window - estimate_tokens(prompt) - estimate_tokens(COMPACT_SYSTEM) - SUMMARY_MARGIN
+    return max(MIN_SUMMARY_TOKENS, room)
 
 
 class CompactionMixin:
@@ -79,7 +89,7 @@ class CompactionMixin:
         try:
             prompt = f"<conversation>\n{transcript_text(self.messages)}\n</conversation>\n\n{self.mode.compact_instructions}"
             async with self.session.client.messages.stream(
-                model=cfg.model, max_tokens=cfg.compact_max_tokens, system=COMPACT_SYSTEM,
+                model=cfg.model, max_tokens=_summary_budget(cfg, prompt), system=COMPACT_SYSTEM,
                 messages=[{"role": "user", "content": prompt}], extra_body=NO_THINKING,
             ) as stream:
                 async for text in stream.text_stream:

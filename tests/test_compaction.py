@@ -96,6 +96,22 @@ def test_the_summary_request_turns_thinking_off(cfg):
     assert client.calls[0]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
+def test_the_summary_may_use_all_the_room_the_context_window_leaves(cfg):
+    import dataclasses
+    from voyager.session import Session
+    client = FakeClient()
+    s = Session(cfg, client=client)
+    s.main.messages = list(MSGS)
+    run(s.main.compact())
+    sent = client.calls[0]
+    used = estimate_tokens(sent["messages"][0]["content"]) + estimate_tokens(sent["system"])
+    assert sent["max_tokens"] > 60_000 and used + sent["max_tokens"] < cfg.context_window  # nearly the whole window, still inside it
+    fixed = Session(dataclasses.replace(cfg, compact_max_tokens=3000), client=(c2 := FakeClient()))
+    fixed.main.messages = list(MSGS)
+    run(fixed.main.compact())
+    assert c2.calls[0]["max_tokens"] == 3000  # an explicit setting wins
+
+
 def test_an_empty_summary_keeps_the_history_and_is_not_retried_at_every_step(cfg):
     from voyager.session import Session
     client = ThinkingOnlyClient()

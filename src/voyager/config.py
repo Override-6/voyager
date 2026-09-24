@@ -53,7 +53,9 @@ class Config:
     # read from the server's /props at startup (see server_context_window), unless --context-window is given.
     context_window: int = 65536
     compact_at: float = 0.70  # auto-compact when the context reaches this fraction of the window
-    compact_max_tokens: int = 16384  # room for the summary (~1k tokens) plus any reasoning a server still does despite the no-thinking switch; a cap, not a target
+    # output cap of the compaction summary request. None: as much as the context window leaves after the prompt (a cap,
+    # not a target: a normal summary ends after ~1k tokens, the rest is room for reasoning a server does despite the no-thinking switch)
+    compact_max_tokens: int | None = None
     # in a workspace: ask the agent to save its state to the workspace at this fraction (None = compact_at - 0.10)
     checkpoint_at: float | None = None
     # in a workspace: automatic "continue" messages when the main agent stops with its plan unfinished
