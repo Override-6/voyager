@@ -13,16 +13,17 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import progress
 from .approach import gate_text
 from .workspace import PLAN_HEADINGS, Workspace
 
-TOOL_KEYS = ("summary", "usage", "example", "status")
+TOOL_KEYS = ("summary", "usage", "example", "check", "repl", "status")  # check, repl: optional (a live-verified skill)
 REQUIRED_TOOL_KEYS = ("summary", "usage", "example")
 STATUSES = ("draft", "verified", "deprecated")
 CONFIDENCES = ("confirmed", "likely", "hypothesis")
 CODE_EXTS = {".py", ".sh", ".bash", ".js", ".mjs", ".ts", ".rb", ".pl", ".lua", ".php", ".ps1"}
 COMMENT_MARKS = ("#", "//", "--", ";", "*", "/*", "<!--", "REM ", "rem ")
-HEADER_RE = re.compile(r"^\s*(?:#|//|--|;|\*|\"\"\"|''')?\s*(summary|usage|example|status)\s*:\s*(.*?)\s*$", re.I)
+HEADER_RE = re.compile(r"^\s*(?:#|//|--|;|\*|\"\"\"|''')?\s*(summary|usage|example|check|repl|status)\s*:\s*(.*?)\s*$", re.I)
 
 BUDGETS = {"objective": 2500, "plan": 7000, "tools": 4000, "knowledge": 4000}
 SUB_BUDGETS = {"objective": 1200, "tools": 3000, "knowledge": 3000}
@@ -199,8 +200,8 @@ def _index(lines: list[str], budget: int, noun: str) -> str:
 
 def tools_index(tools: list[ToolInfo], budget: int) -> tuple[str, str]:
     live = [t for t in tools if t.status != "deprecated"]
-    lines = [f"- {t.path} — {t.header.get('summary', '(no header)')}" + ("" if t.status == "verified" else f" [{t.status}]")
-             for t in live]
+    lines = [f"- {t.path} — {t.header.get('summary', '(no header)')}" + (f" (skill, repl {t.header['repl']})" if t.header.get("repl") else "")
+             + ("" if t.status == "verified" else f" [{t.status}]") for t in live]
     drafts = sum(1 for t in live if t.status != "verified")
     title = f"{len(live)} tools" + (f", {drafts} not verified" if drafts else "") + \
         (f", {len(tools) - len(live)} deprecated (hidden)" if len(live) < len(tools) else "")
@@ -232,6 +233,7 @@ def state_block(ws: Workspace, *, main: bool, round_no: int = 0) -> str:
         f"Current phase: {ws.current_phase()}" + ("" if ws.phases() else
             " — PLAN.md has no phases yet: start with \"Phase 0: frame the objective\" from your method (first message)."),
         *([gate] if (gate := gate_text(ws)) else []),
+        progress.state_line(ws),
         f"## OBJECTIVE.md\n{_file(ws, 'OBJECTIVE.md', b['objective'])}",
         f"## PLAN.md\n{_file(ws, 'PLAN.md', b['plan'])}",
         f"## tools/ — {t_title}\n{t_index}",

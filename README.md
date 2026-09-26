@@ -68,13 +68,18 @@ scratch/       throwaway scripts and raw outputs (gitignored, not indexed)
   and note, and lint problems (missing headers or frontmatter, a PLAN.md over budget, ...). Each section has a size budget; going over cuts it and becomes a
   problem to fix, which is what keeps the workspace pruned. The block is a snapshot, refreshed on each new message and after each compaction, not on every
   request, so the prompt prefix stays cacheable. Sub-agents get a smaller block (objective + indexes) and may not edit OBJECTIVE.md / PLAN.md.
-* **Method.** Phases with checkable exit criteria (phase 0 writes the objective, takes stock, then chooses the approach); in each step the agent works manually, writes a script in `scratch/` for
-  bulk or repeated work, or promotes it to `tools/` when it will be reused; facts go to `knowledge/` as soon as they are learned.
+* **Method.** Phases with checkable exit criteria (phase 0 writes the objective and its progress probe, takes stock, then chooses the approach); in each step the agent works
+  live in a `repl` (stateful systems), manually, with a script in `scratch/` for bulk or repeated work, or promotes it to `tools/` / a skill when it will be reused;
+  facts go to `knowledge/` as soon as they are learned. Research is systematic but incremental: prior art for the current Now item, when it becomes
+  current, and a one-call experiment before any reading about how a live system behaves. Pieces are built bottom-up, each one run before the next.
 * **Approach gate.** Before acting on the environment the agent must write `knowledge/approach.md` (Channels, Approaches with at least three different in kind,
   Prior art with URLs, Decision). The harness checks it structurally (`approach.py`) and against what it saw the agent do (`evidence.py` counts `web_search` / `web_fetch` / `search_workspace` calls in `scratch/.evidence.json`; at least 3 searches and 2 page reads are required, and cited URLs must be ones the agent really came across): until it is complete the state block says "Approach decision: NOT RECORDED"
   and the keep-going nudge fires even in phase 0. The prompts stay domain-neutral: they describe how a language model should choose, never what to choose.
-* **Tools.** `save_tool(path, content)` checks the header, runs its `example` from the workspace root, marks it `verified` (and commits) or `draft` (and
+* **Tools.** `save_tool(path, content)` checks the header, runs its `example` (then its optional `check` command) from the workspace root, marks it `verified` (and commits) or `draft` (and
   returns the error); `search_workspace(query, scope)` ranks tools and notes. Both exist only inside a workspace.
+* **Skills (verified live).** A tool whose header has `repl: <name>` is a skill: functions used inside a running `repl` (a DB session, a network client).
+  `save_tool` loads the file into that live REPL, runs `example` there as code, then requires `check` (mandatory for skills) to evaluate to true:
+  a skill is verified by its effect on the world, not only by running. `repl(name, load="tools/<area>/*.py")` reloads saved skills into a fresh REPL.
 * **Compaction = checkpoint.** At `checkpoint_at` (default `compact_at - 0.10`) a `<checkpoint>` block asks the agent to save its state to the workspace;
   compaction waits for it (up to `compact_at + 0.15`), then summarizes only the work in flight. Each compaction ends a *round*: the round counter goes up,
   the workspace is committed and the snapshot refreshed.
@@ -82,8 +87,13 @@ scratch/       throwaway scripts and raw outputs (gitignored, not indexed)
   by the next compaction (`PLAN.md` nearly always does), the summary note tells the agent to re-read them; on `--resume`, the same for files edited
   while the session was stopped (e.g. you edited `PLAN.md`), which also sends the session back to work even after a clean turn. Older saves are not flagged.
 * **Keep going.** The main agent should end its turn only when the objective is done, it is blocked (written under `## Blocked`), or it is waiting
-  for sub-agents / tasks. If it stops with unfinished phases and none of those applies, a `<continue>` message sends it back to work: at most
+  for sub-agents / tasks (a placeholder under Blocked, like `- (None yet)`, does not count). If it stops with unfinished phases and none of those applies, a `<continue>` message sends it back to work: at most
   `--max-nudges` (default 20) per user message, and never twice in a row without a workspace change (git HEAD moved), so a stuck agent can't loop.
+* **Measured progress.** `OBJECTIVE.md` has a `## Progress probe`: one shell command whose last output line holds a number that grows as the
+  objective gets closer (written in phase 0). The harness runs it at every round end (`voyager/progress.py`, history in `scratch/.progress.json`),
+  logs a `progress` event and shows the values in the state block and in `--monitor`. After 2 rounds without progress (no increase; without a probe,
+  the first open Now item unchanged) the next round opens with a stall review (`system/voyager/STALL.md`): what was tried, a smaller verifiable
+  next step, or another approach. Not again in the next round, so a review gets time to work.
 * **Git.** The workspace is a git repository, committed automatically at the end of each turn, after each compaction, and when a tool is verified.
 
 ## The TUI and the agents (both modes)
@@ -101,6 +111,9 @@ scratch/       throwaway scripts and raw outputs (gitignored, not indexed)
 | History | `↑`/`↓` recall, persisted in `~/.voyager/history` |
 | Auto-compaction | at 70 % of the 65 536-token window the discussion is summarized; the system prompt is never compacted, it is re-sent from `system/*.md` on every request |
 | Permissions | none: every tool call runs immediately |
+| REPL | `repl(name, code)` runs code in a named, persistent `python` / `node` / `shell` interpreter that keeps its state (imports, variables, open connections) between calls; output printed between calls (event handlers) comes with the next call; a chunk that outlives its `timeout` keeps running (call again with no code to wait). REPLs survive a stopped turn and die with the session (or `/clear`) |
+| Lint feedback | after `write_file` / `edit_file` / `save_tool` on a `.py` file, ruff's syntax errors and pyflakes findings (undefined names, unused imports / variables…) are appended to the result; never style rules, never an error status |
+| Broken steps | a response cut off at `max_tokens`, or a tool call that came back as plain text (unparsed markup), is dropped and the model is asked to redo it (`system/CUT_OFF.md`, `BROKEN_CALL.md`), at most twice in a row, instead of ending the turn |
 | Web | `web_search` (free, no API key) and `web_fetch` for every agent: see below |
 | MCP | servers from a config file, started **lazily** on the first tool call (see below) |
 
@@ -263,10 +276,10 @@ src/voyager/
                                         search_workspace), commands (/voyager)
   sessions_store.py                     listing saved conversations (meta.json next to each session.json)
   plain.py                              -p mode printer
-  tools/                                bash, read/write/edit_file, glob, grep, tasks, agents, web (web.py, websearch.py)
+  tools/                                bash, repl (+ repl_drivers/), read/write/edit_file (+ lint), glob, grep, tasks, agents, web (web.py, websearch.py)
   mcpclient/                            MCP: config, lazy server connection, tool wrappers, schema cache
   tui/                                  wrap, render, panes, controller, commands, picker, keys, app  (prompt_toolkit)
-system/  chat/{MAIN,COMPACT}.md  voyager/{MISSION,PERSONA,METHOD,COMPACT,CHECKPOINT,AFTER_COMPACT,CHANGED_FILES}.md  LOCAL.md CODER.md COMPACT_SYSTEM.md SUMMARY.md
+system/  chat/{MAIN,COMPACT}.md  voyager/{MISSION,PERSONA,METHOD,COMPACT,CHECKPOINT,AFTER_COMPACT,CHANGED_FILES}.md  LOCAL.md CODER.md COMPACT_SYSTEM.md SUMMARY.md CUT_OFF.md BROKEN_CALL.md
 tests/   pytest (offline: fake `claude`, no network); chat/ and voyager/ hold each mode's tests
 ```
 

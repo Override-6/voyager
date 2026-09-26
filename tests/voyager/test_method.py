@@ -59,5 +59,9 @@ def test_research_rules_are_pinned_and_checkpoint_asks_for_sources(wcfg):
     assert "Orient and look it up" in method and "knowledge/sources.md" in method
     assert "Never work from memory on something with a spec" in method and "Two failures means research" in method
     assert "Prior art first, every time" in method
+    assert "Research is incremental" in method and "never what later phases will need" in method  # just in time
+    assert "run the experiment first" in method and "Build bottom-up" in method and "**Skill**" in method
+    assert "Progress probe" in method and "<stall-review>" in method
     assert "sources.md" in m.mode._prompt("voyager/CHECKPOINT", round="0")
-    assert "hypothesis" in m.mode.summary_note
+    assert "hypothesis" in m.mode.summary_note and "REPLs are still running" in m.mode.summary_note
+    assert "never reasoning" in m.mode.compact_instructions and "exact next tool call" in m.mode.compact_instructions

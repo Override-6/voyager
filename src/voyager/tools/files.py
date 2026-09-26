@@ -6,6 +6,7 @@ import difflib
 from typing import Any
 
 from .base import Tool, ToolContext, ToolError, clip
+from .lint import lint_note
 
 MAX_LINE_CHARS = 2000
 
@@ -104,7 +105,7 @@ class WriteFile(Tool):
         existed = p.exists()
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
-        return f"{'Overwrote' if existed else 'Created'} {p} ({len(content.splitlines())} lines)"
+        return f"{'Overwrote' if existed else 'Created'} {p} ({len(content.splitlines())} lines)" + await lint_note(p, ctx.cwd)
 
 
 class EditFile(Tool):
@@ -154,5 +155,6 @@ class EditFile(Tool):
 
     async def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
         _, after = self._apply(args, ctx)
-        ctx.resolve(args["path"]).write_text(after, encoding="utf-8")
-        return f"Edited {ctx.resolve(args['path'])}"
+        p = ctx.resolve(args["path"])
+        p.write_text(after, encoding="utf-8")
+        return f"Edited {p}" + await lint_note(p, ctx.cwd)

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..config import load_system_prompt
 from ..mode import AgentMode
+from . import progress
 from .approach import gate_text
 from .compaction import CHECKPOINT_GAP, HARD_GAP
 from .evidence import record
@@ -93,7 +94,7 @@ class VoyagerAgentMode(AgentMode):
         if not a.is_main:
             return False
         return bool(self._changed_while_stopped()) or (
-            not ws.section("## Blocked") and bool(ws.unfinished() or (not ws.phases() and gate_text(ws))))
+            not ws.blockers() and bool(ws.unfinished() or (not ws.phases() and gate_text(ws))))
 
     def on_submit(self, src: str) -> None:
         if src == "user":  # the user is steering again: the nudge budget starts over
@@ -133,6 +134,25 @@ class VoyagerAgentMode(AgentMode):
         self.baseline = fingerprint(self.ws)
         await self.ws.commit(f"{self.agent.name} r{self.round - 1} compacted: {self.ws.current_phase()}")
         self._round_end_commit = await self.ws.head()
+        if self.agent.is_main:
+            await self._measure_progress()
+
+    async def _measure_progress(self) -> None:
+        """Run the progress probe for the round that ended; after rounds without progress, open the next with a review."""
+        a = self.agent
+        row = await progress.measure(self.ws, self.round - 1)
+        if row["line"]:  # a probe is defined
+            shown = progress.fmt(row["value"]) if row["value"] is not None else f"probe failed ({row['line']})"
+            a.log.add("notice", f"◆ progress r{row['round']}: {shown}", event="progress", value=row["value"])
+        if not row["review"]:
+            return
+        text = self._prompt("voyager/STALL", rounds=str(progress.STALL_ROUNDS), trend=progress.trend(progress.history(self.ws)),
+                            now=row["now"] or "(none)")
+        first = a.messages[0]
+        if isinstance(first["content"], str):
+            first["content"] = [{"type": "text", "text": first["content"]}]
+        first["content"].append({"type": "text", "text": text})
+        a.log.add("notice", f"⚠ no progress for {progress.STALL_ROUNDS} rounds: stall review requested", event="stall")
 
     def round_info(self) -> dict[str, Any]:
         """Where the mission stood when the round ended: phase, the workspace commit, and PLAN.md as it was."""

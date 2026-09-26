@@ -32,7 +32,7 @@ def maybe_nudge(m: "VoyagerAgentMode", progressed: bool) -> None:
     m.idle_nudges = 0 if progressed else m.idle_nudges
     busy = any(x.running for x in session.agents.values() if x is not a) or session.tasks.running()
     gate = gate_text(ws)
-    if (a.inbox or busy or not (ws.unfinished() or (not ws.phases() and gate)) or ws.section("## Blocked")
+    if (a.inbox or busy or not (ws.unfinished() or (not ws.phases() and gate)) or ws.blockers()
             or m.nudges >= session.cfg.max_nudges or m.idle_nudges >= 1):
         return
     m.nudges += 1

@@ -6,11 +6,13 @@ from .agents import AGENT_TOOLS
 from .base import Tool, ToolContext, ToolError
 from .bash import Bash
 from .files import EditFile, ReadFile, WriteFile
+from .repl import ReplTool
 from .search import Glob, Grep
 from .tasks import KillTask, Tasks
 from .web import WebFetch, WebSearch
 
-BASE_TOOLS: list[Tool] = [Bash(), ReadFile(), WriteFile(), EditFile(), Glob(), Grep(), Tasks(), KillTask(), WebSearch(), WebFetch()]
+BASE_TOOLS: list[Tool] = [Bash(), ReplTool(), ReadFile(), WriteFile(), EditFile(), Glob(), Grep(), Tasks(), KillTask(), WebSearch(),
+                          WebFetch()]
 
 
 def tools_for(is_main: bool) -> dict[str, Tool]:

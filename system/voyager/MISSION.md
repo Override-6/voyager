@@ -43,7 +43,8 @@ usage: uv run tools/<area>/<name>.py <args> [--options]
 example: uv run tools/<area>/<name>.py <a real, quick argument set>
 """
 ```
-- Save tools with `save_tool`: it runs `example` from the workspace root, marks the tool `verified` or `draft` in its header, indexes and commits it. Make `example` a real, quick run (seconds, not minutes).
+- Save tools with `save_tool`: it runs `example` (then `check`, an optional shell command that must exit 0 when the example had its effect) from the workspace root, marks the tool `verified` or `draft` in its header, indexes and commits it. Make `example` a real, quick run (seconds, not minutes).
+- Skills are tools used inside a live `repl` (definitions only, e.g. `def add_user(db, name)`): add `repl: <repl name>` to the header, write `example` as code for that REPL and `check` as an expression that is true only if the example had its effect. `save_tool` verifies them in the running REPL; `repl(name, load="tools/<area>/*.py")` loads them into a fresh one.
 - Python: run with `uv run`; declare dependencies in a PEP 723 block (`# /// script` … `# ///`) so each tool installs its own. Other languages are fine when they fit better.
 - One job per tool; shared helpers in `tools/lib/` (written with `write_file`, imported by tools).
 - Keep every file under 300 lines; 500 lines is the hard maximum. Past 300, split it by responsibility (move helpers into `tools/lib/`, split a tool that does two jobs) instead of growing it.

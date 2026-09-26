@@ -33,9 +33,9 @@ def test_chat_has_no_pinned_text_no_extra_state_and_no_checkpoint(cfg):
 
 def test_system_prompt_files_are_laid_out_by_mode(cfg):
     d = cfg.system_dir
-    assert {p.name for p in d.iterdir() if p.is_file()} == {"LOCAL.md", "CODER.md", "COMPACT_SYSTEM.md", "SUMMARY.md"}  # shared by both modes
+    assert {p.name for p in d.iterdir() if p.is_file()} == {"LOCAL.md", "CODER.md", "COMPACT_SYSTEM.md", "SUMMARY.md", "CUT_OFF.md", "BROKEN_CALL.md"}  # shared by both modes
     assert {p.name for p in (d / "chat").iterdir()} == {"MAIN.md", "COMPACT.md"}
-    assert {p.name for p in (d / "voyager").iterdir()} == {"MISSION.md", "METHOD.md", "PERSONA.md", "COMPACT.md", "CHECKPOINT.md", "AFTER_COMPACT.md", "CHANGED_FILES.md"}
+    assert {p.name for p in (d / "voyager").iterdir()} == {"MISSION.md", "METHOD.md", "PERSONA.md", "COMPACT.md", "CHECKPOINT.md", "AFTER_COMPACT.md", "CHANGED_FILES.md", "STALL.md"}
 
 
 def test_the_compaction_prompts_are_files_and_editable_without_touching_code(cfg, tmp_path):

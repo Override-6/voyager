@@ -8,6 +8,7 @@ the model stops calling tools.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -15,12 +16,17 @@ import anthropic
 
 from .agent import Agent, AgentError
 from .compactor import CompactionMixin
+from .config import load_system_prompt
 from .log import Item
 from .tools import ToolContext, ToolError
 from .tools.base import clip
 
 if TYPE_CHECKING:
     from .session import Session
+
+# A tool call the server failed to parse leaks into the text as its raw markup.
+TOOL_MARKUP_RE = re.compile(r"</(?:tool_call|function|parameter|invoke)>|<tool_call>")
+MAX_REPAIRS = 2  # broken steps in a row the agent is asked to redo before the turn ends anyway
 
 
 class LocalAgent(CompactionMixin, Agent):
@@ -36,6 +42,8 @@ class LocalAgent(CompactionMixin, Agent):
         self.mode = session.mode.for_agent(self)  # chat or voyager behaviour (see mode.py)
         self._compact_retry_at = 0  # see CompactionMixin
         self.compactions = 0  # how many times this agent's context was compacted: its current *round* (transcript.py)
+        self.broken_step: str | None = None  # why the last step's output is unusable: "CUT_OFF" / "BROKEN_CALL" (system/)
+        self._repairs = 0  # broken steps in a row
 
     @property
     def tools(self) -> dict[str, Any]:
@@ -60,6 +68,10 @@ class LocalAgent(CompactionMixin, Agent):
             if manual_only or not self.messages or self.messages[-1]["role"] != "user":
                 return  # a bare /compact: nothing to answer
             assistant, tool_uses, items = await self._stream_step()
+            if self.broken_step and self._repairs < MAX_REPAIRS:
+                self._ask_to_redo(self.broken_step)
+                continue
+            self._repairs = 0
             if assistant:
                 self.messages.append({"role": "assistant", "content": assistant})
             self._measured_len = len(self.messages)
@@ -155,15 +167,31 @@ class LocalAgent(CompactionMixin, Agent):
                 assistant.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
                 tool_uses.append(b)
 
+        self.broken_step = None
         if final.stop_reason == "max_tokens":
             log.add("error", f"response hit max_tokens ({cfg.max_tokens}); output may be cut off")
             for it in tool_items:  # a tool call cut off mid-JSON must not run
                 log.update(it, status="error", result="cut off by max_tokens")
             assistant = [b for b in assistant if b["type"] != "tool_use"]
             tool_uses, tool_items = [], []
+            self.broken_step = "CUT_OFF"
+        elif not tool_uses and any(TOOL_MARKUP_RE.search(b["text"]) for b in assistant):
+            log.add("error", "the model's tool call came back as plain text (unparsed tool-call markup)")
+            self.broken_step = "BROKEN_CALL"
         elif not assistant:
             log.add("notice", "(model returned no text)")
         return assistant, tool_uses, tool_items
+
+    def _ask_to_redo(self, why: str) -> None:
+        """A step whose output is unusable must not end the turn: drop it and ask again, with a note on what went wrong."""
+        self._repairs += 1
+        last = self.messages[-1]
+        if isinstance(last["content"], str):
+            last["content"] = [{"type": "text", "text": last["content"]}]
+        note = load_system_prompt(self.session.cfg, why, extra={"max_tokens": str(self.session.cfg.max_tokens)})
+        last["content"].append({"type": "text", "text": note.strip()})
+        self.log.add("notice", f"↻ broken step ({why.lower()}): asking the model to redo it [{self._repairs}/{MAX_REPAIRS}]",
+                     event="repair")
 
     def _close_open(self, items: Any) -> None:
         for it in items:

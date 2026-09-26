@@ -23,6 +23,8 @@ from pathlib import Path
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,47}$")
 PLAN_HEADINGS = ("## Phases", "## Current phase", "## Now", "## Blocked", "## Log")
 PHASE_RE = re.compile(r"^\s*[-*]\s*\[([ x>])\]\s*(.+)$", re.IGNORECASE)
+# "- (None yet)", "none.", "N/A": a Blocked section that says nothing is blocked
+NOT_BLOCKED_RE = re.compile(r"^\s*(?:[-*]\s*)?(?:\(.*\)|(?:none|nothing|n/?a)(?: yet)?[.!]?)\s*$", re.IGNORECASE)
 GIT_ID = ["-c", "user.name=voyager", "-c", "user.email=voyager@localhost", "-c", "commit.gpgsign=false"]
 
 OBJECTIVE_TEMPLATE = """# Objective
@@ -36,6 +38,9 @@ OBJECTIVE_TEMPLATE = """# Objective
 
 ## Inputs
 (paths, URLs, accounts, anything the work starts from)
+
+## Progress probe
+(one shell command, run from the workspace root at every round end, whose last output line is a number that grows as the objective gets closer)
 """
 
 PLAN_TEMPLATE = """# Plan
@@ -151,6 +156,10 @@ class Workspace:
             elif inside and line.strip():
                 out.append(line)
         return out
+
+    def blockers(self) -> list[str]:
+        """What PLAN.md says needs the user: the Blocked section minus placeholders like "- (None yet)"."""
+        return [ln for ln in self.section("## Blocked") if not NOT_BLOCKED_RE.match(ln)]
 
     def unfinished(self) -> bool:
         """PLAN.md has phases and at least one is not done."""

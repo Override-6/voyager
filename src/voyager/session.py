@@ -24,6 +24,7 @@ from .mcpclient.manager import McpManager
 from .tasks import TaskManager
 from .tools import Tool, ToolError, tools_for
 from .tools.base import clip
+from .tools.repl import ReplManager
 from .transcript import TranscriptWriter
 
 AGENT_CLASSES: dict[str, type[Agent]] = {"local": LocalAgent, "coder": CoderAgent, "bonsai": LocalAgent}  # "bonsai": legacy name of "local" in saved sessions
@@ -51,6 +52,7 @@ class Session:
         self._counter = 0
         self._resumed = False  # set by load(): see resume_work()
         self.tasks = TaskManager(self)
+        self.repls = ReplManager()  # persistent interpreters (repl tool): they outlive a stopped turn, not the session
         self.mcp = McpManager(self)
         self.main: Agent = LocalAgent(self, "main", "main")
         self.agents["main"] = self.main
@@ -148,6 +150,7 @@ class Session:
         """/clear: forget everything except the (emptied) main agent."""
         self.stop_all()
         self.tasks.reset()
+        self.repls.kill_all()
         self.agents = {"main": self.main}
         self.main.messages.clear()
         self.main.log.items.clear()
@@ -171,6 +174,7 @@ class Session:
     async def shutdown(self) -> None:
         await asyncio.gather(*(a.close() for a in self.agents.values()))
         await self.tasks.shutdown()
+        await self.repls.shutdown()
         await self.mcp.shutdown()
         self.save()
         self.events.close()

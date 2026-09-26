@@ -6,6 +6,16 @@ The Voyager pattern for a local model served by llama-server through the Anthrop
 coding / chat assistant) is a secondary convenience: keep it working, but design decisions favour voyager mode. `README.md` is the
 user-facing reference (features, commands, flags); this file is for working on the code.
 
+## Golden rule: the harness is for any task
+Voyager mode must work for **any** long objective (research, reverse engineering, scraping, coding, games, ops...). The missions it is
+tested on (e.g. Minecraft) are test cases, never the target. So:
+- Nothing model-facing (`system/*.md`, tool descriptions and schemas, help text returned by tools, harness notes) may name, hint at or take
+  examples from a test mission. Use neutral examples (a database session, `add_user(db, name)`, a network client). Grep for mission words
+  before finishing any change to model-facing text.
+- Fix a failure seen on a test mission with a **general** mechanism (a tool, a harness check, a method rule) that would help on any
+  mission; never with domain knowledge, special cases or heuristics tuned to that mission.
+- Same for the model: the served model is an interchangeable backend; don't tailor the harness to one model's quirks.
+
 ## Commands
 - Tests: `uv run pytest -q` (offline, ~2 s: fake model client, fake `claude`, fake MCP server; no network).
 - Run: `./voyager [prompt]` (the launcher script; starts the model server if needed) or `uv run voyager [prompt]` (needs the model server); `-p` for non-interactive; `--voyager NAME` to start in voyager mode (workspace NAME; default is chat).
@@ -43,7 +53,7 @@ user-facing reference (features, commands, flags); this file is for working on t
   (`protocol.py`) and the replica, and cover it in `tests/daemon/`. `--local` (and the tests) use a plain in-process `Session` through `tui/backend.py`.
 - System prompts are files in `system/` (`chat/MAIN.md`, `voyager/MISSION.md` + `METHOD.md` + `PERSONA.md`, and `LOCAL.md` sub-agents /
   `CODER.md` shared; the compaction prompts too: `COMPACT_SYSTEM.md`, `SUMMARY.md`, `{chat,voyager}/COMPACT.md`, `voyager/CHECKPOINT.md`,
-  `voyager/AFTER_COMPACT.md`). Model-facing text goes in these files, never hardcoded in Python. They are re-read on every request; `{{placeholders}}` are filled by `config.load_system_prompt`.
+  `voyager/AFTER_COMPACT.md`; harness notes: `CUT_OFF.md` / `BROKEN_CALL.md` (redo a broken step), `voyager/STALL.md` (stall review)). Model-facing text goes in these files, never hardcoded in Python. They are re-read on every request; `{{placeholders}}` are filled by `config.load_system_prompt`.
 
 ## Voyager mode: invariants to preserve
 - A session is in voyager mode (in a workspace) iff its cwd is inside `cfg.workspaces_dir` (`Workspace.at`); nothing else is persisted for it.

@@ -257,6 +257,12 @@ def test_no_nudge_when_blocked_or_done(monkeypatch, wcfg, ws, plan):
     assert len(nudge_run(monkeypatch, Session(wcfg), ws, progress=False)) == 1
 
 
+@pytest.mark.parametrize("placeholder", ["- (None yet — the hard risk is resolved.)", "None.", "- n/a"])
+def test_a_placeholder_under_blocked_does_not_stop_the_nudge(monkeypatch, wcfg, ws, placeholder):
+    (ws.root / "PLAN.md").write_text(PLAN_OPEN.replace("## Blocked\n", f"## Blocked\n{placeholder}\n"))
+    assert ws.blockers() == [] and len(nudge_run(monkeypatch, Session(wcfg), ws, progress=False)) == 2
+
+
 def test_no_nudge_while_waiting_for_a_sub_agent_or_outside_a_workspace(monkeypatch, cfg, wcfg, ws):
     (ws.root / "PLAN.md").write_text(PLAN_OPEN)
     s = Session(wcfg)
